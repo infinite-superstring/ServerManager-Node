@@ -1,6 +1,7 @@
 import asyncio
 import json
 import platform
+from datetime import datetime
 
 import aiohttp
 import psutil
@@ -24,7 +25,7 @@ async def update_node_info(ws: WebSocket):
         },
         "disks": [{"device": i.device, "mount_point": i.mountpoint, "fs_type": i.fstype, "total": psutil.disk_usage(i.device).total} for i in psutil.disk_partitions()],
         "hostname": platform.node(),
-        "boot_time": psutil.boot_time()
+        "boot_time": datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")
     }
     try:
         pass
