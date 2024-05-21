@@ -26,7 +26,6 @@ class WebSocket:
         SSL = config().get('server').get('enable_SSL')
         host = config().get('server').get('server_host')
         port = config().get('server').get('server_port')
-        ws_path = config().get('server').get('server_path')
         ws_url = ("wws://" if SSL else "ws://" + host + ":" + str(port) + "/ws/node/node_client")
         auth_path = f'{"https" if SSL else "http"}://{host}:{port}/api/auth/nodeAuth'
         auth_data = {
@@ -36,6 +35,8 @@ class WebSocket:
         }
         while True:
             try:
+                if self.__scheduler.state == 'RUNNING':
+                    await self.__scheduler.shutdown()
                 # 发送节点认证请求
                 self.__session = await authenticate(self.__session, auth_path, auth_data)
                 async with self.__session.ws_connect(ws_url, autoping=True) as ws:
