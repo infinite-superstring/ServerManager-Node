@@ -13,7 +13,6 @@ async def authenticate(session, auth_path, auth_data):
             data = await resp.json()
             if data["status"] == 1:
                 logger.info(f'认证成功')
-                # server_config = data.get('data').get('config')
                 return session
             else:
                 logger.error(f"认证失败: {data['msg']}({data['status']})")
