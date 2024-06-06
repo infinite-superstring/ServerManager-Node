@@ -41,13 +41,14 @@ class tty_service:
 
     def send_command(self, session_id, command):
         if session_id in self.__session:
+            if locale.getpreferredencoding() != 'utf-8':
+                command = command.encode(locale.getpreferredencoding())
             self.__session[session_id].sendline(command)
         else:
             raise RuntimeError("Terminal session does not exist")
 
     def terminal_output(self, session_id, ws: WebSocket):
         async def __send(ws, data):
-            print(data)
             await ws.websocket_send_json({'action': 'terminal_output', 'data': {'uuid': session_id, "output": data}})
 
         if session_id in self.__session:
@@ -62,11 +63,15 @@ class tty_service:
                 callback(self.__session[session_id].readline().decode(locale.getpreferredencoding(), errors='ignore'))
             except pexpect.TIMEOUT:
                 pass
+            except KeyboardInterrupt:
+                return
 
     def close_session(self, session_id):
+        print("关闭终端会话.....")
         """关闭终端会话"""
         if session_id in self.__session:
             if sys.platform != 'win32':
+                self.__session[session_id].terminate(force=True)
                 self.__session[session_id].close()
                 self.__session.pop(session_id)
             else:
