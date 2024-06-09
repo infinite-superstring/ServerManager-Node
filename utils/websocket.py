@@ -7,7 +7,8 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from utils.auth import authenticate
 from utils.logger import logger
-from utils.node import update_node_usage, update_node_info, get_process_list
+from utils.node import update_node_usage, update_node_info, get_process_list, start_get_process_list, \
+    stop_get_process_list
 from utils.tty import tty_service
 
 
@@ -70,7 +71,8 @@ class WebSocket:
                             logger.info(f'Close......')
                             self.__update_node_usage_scheduler.shutdown()
                             self.__get_process_list_scheduler.shutdown()
-                            return
+                            await stop_get_process_list()
+                            return exit(0)
                         # 初始化节点配置
                         case 'init_node_config':
                             logger.info(f'Init node config....')
@@ -122,6 +124,10 @@ class WebSocket:
                             command = data['data']['command']
                             tty_session_uuid = data['data']['uuid']
                             self.__tty_service.send_command(tty_session_uuid, command)
+                        case "start_get_process_list":
+                            await start_get_process_list(self)
+                        case "stop_get_process_list":
+                            await stop_get_process_list()
                         case _:
                             logger.error(f'未定义的操作: {data["action"]}')
                 case web.WSMsgType.BINARY:
@@ -139,5 +145,6 @@ class WebSocket:
             logger.error(e)
             self.__update_node_usage_scheduler.shutdown(wait=False)
             self.__update_node_usage_scheduler.shutdown(wait=False)
+            await stop_get_process_list()
             await self.__ws.close()
             logger.info('Stop WebSocket...')

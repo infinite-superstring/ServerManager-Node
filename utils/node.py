@@ -1,10 +1,13 @@
 import asyncio
 import json
 import platform
+import time
 from datetime import datetime
+from threading import Thread
 
 import aiohttp
 import psutil
+from psutil import AccessDenied
 
 from utils.logger import logger
 import utils.websocket as WebSocket
@@ -12,6 +15,27 @@ import utils.websocket as WebSocket
 
 # import main
 
+get_process_list_flag: bool = False
+get_process_list_thread: Thread
+
+async def get_disk_list():
+    disk_list = []
+    for item in psutil.disk_partitions():
+        total = 0
+        used = 0
+        try:
+            total = psutil.disk_usage(item.device).total
+            used = psutil.disk_usage(item.device).used
+        except Exception:
+            pass
+        disk_list.append({
+            "device": item.device,
+            "mount_point": item.mountpoint,
+            "fs_type": item.fstype,
+            "total": total,
+            "used": used
+        })
+    return disk_list
 
 async def update_node_info(ws: WebSocket):
     """更新节点信息"""
@@ -24,14 +48,11 @@ async def update_node_info(ws: WebSocket):
             "processor": psutil.cpu_count(),
             "core": psutil.cpu_count(logical=False)
         },
-        "disks": [{"device": i.device, "mount_point": i.mountpoint, "fs_type": i.fstype,
-                   "total": psutil.disk_usage(i.device).total, "used": psutil.disk_usage(i.mountpoint).used} for i in
-                  psutil.disk_partitions()],
+        "disks": await get_disk_list(),
         "hostname": platform.node(),
         "boot_time": datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")
     }
     try:
-        pass
         await ws.websocket_send_json({'action': 'refresh_node_info', 'data': node_info})
     except Exception as e:
         logger.error(f"节点信息更新失败！\n{e}")
@@ -103,15 +124,7 @@ async def update_node_usage(ws: WebSocket):
         },
         "disk": {
             "io": node_disk_io,
-            'partition_list': [
-                {
-                    "device": i.device,
-                    "mount_point": i.mountpoint,
-                    "fs_type": i.fstype,
-                    "total": psutil.disk_usage(i.device).total,
-                    "used": psutil.disk_usage(i.mountpoint).used
-                } for i in psutil.disk_partitions()
-            ]
+            'partition_list': await get_disk_list(),
         },
         "network": {
             "io": node_network_io
@@ -120,21 +133,46 @@ async def update_node_usage(ws: WebSocket):
     await ws.websocket_send_json({'action': 'upload_running_data', 'data': node_usage})
 
 
-async def get_process_list(ws: WebSocket, index: str = None):
+async def start_get_process_list(ws: WebSocket):
+    global get_process_list_flag
     """获取节点进程列表"""
-    temp = []
-    for proc in psutil.process_iter(['pid', 'name', 'username', 'status', 'cpu_percent', 'memory_info']):
-        info = proc.info
-        temp.append({
-            "pid": info.get("pid"),
-            "name": info.get("name"),
-            "username": info.get("username"),
-            "status": info.get("status"),
-            "cpu_percent": info.get("cpu_percent"),
-            "memory_usage": info.get("memory_info").rss,
-            "swap_usage": info.get("memory_info").vms
-        })
-    await ws.websocket_send_json({'action': 'get_process_list', 'data': {
-        'process_list': temp,
-        'index': index
-    }})
+    logger.debug('服务端发起获取进程列表')
+    if not get_process_list_flag:
+        get_process_list_thread = Thread(target=get_process_list, args=(ws,))
+        get_process_list_thread.start()
+        get_process_list_flag = True
+
+async def stop_get_process_list():
+    global get_process_list_flag
+    logger.debug("服务端停止获取进程列表")
+    if get_process_list_flag:
+        get_process_list_flag = False
+
+def get_process_list(ws: WebSocket):
+    global get_process_list_flag
+    logger.debug("获取进程列表进程已启动.....")
+    while get_process_list_flag:
+        try:
+            temp = []
+            for proc in psutil.process_iter(['pid', 'name', 'username', 'status', 'cpu_percent', 'memory_info']):
+                info = proc.info
+                temp.append({
+                    "pid": info.get("pid"),
+                    "name": info.get("name"),
+                    "username": info.get("username"),
+                    "status": info.get("status"),
+                    "cpu_percent": round(info.get("cpu_percent") / psutil.cpu_count(), 1),
+                    "memory_usage": round((info.get("memory_info").rss / psutil.virtual_memory().total) * 100, 1),
+                    "swap_usage": info.get("memory_info").vms
+                })
+        except AccessDenied:
+            logger.warning("无权限获取进程列表，请检查是否已用root用户运行")
+            get_process_list_flag = False
+        else:
+            asyncio.run(
+                ws.websocket_send_json({'action': 'process_list', 'data': {
+                    'process_list': temp,
+                }})
+            )
+        time.sleep(5)
+    logger.debug("获取进程列表进程已停止")
