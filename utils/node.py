@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import platform
 import time
 from datetime import datetime
@@ -11,7 +12,7 @@ from psutil import AccessDenied
 
 from utils.logger import logger
 import utils.websocket as WebSocket
-
+from utils.processUtils import kill_proc_tree
 
 # import main
 
@@ -24,8 +25,8 @@ async def get_disk_list():
         total = 0
         used = 0
         try:
-            total = psutil.disk_usage(item.device).total
-            used = psutil.disk_usage(item.device).used
+            total = psutil.disk_usage(item.mountpoint).total
+            used = psutil.disk_usage(item.mountpoint).used
         except Exception:
             pass
         disk_list.append({
@@ -48,6 +49,7 @@ async def update_node_info(ws: WebSocket):
             "processor": psutil.cpu_count(),
             "core": psutil.cpu_count(logical=False)
         },
+        "memory_total": psutil.virtual_memory().total,
         "disks": await get_disk_list(),
         "hostname": platform.node(),
         "boot_time": datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")
@@ -147,6 +149,16 @@ async def stop_get_process_list():
     logger.debug("服务端停止获取进程列表")
     if get_process_list_flag:
         get_process_list_flag = False
+
+async def kii_process(pid, tree_mode):
+    if pid == os.getpid():
+        raise RuntimeError("won't kill myself")
+    if psutil.pid_exists(pid) and not tree_mode:
+        psutil.Process(pid).kill()
+    elif psutil.pid_exists(pid) and tree_mode:
+        kill_proc_tree(pid)
+    else:
+        RuntimeError(f"Process {pid} does not exist")
 
 def get_process_list(ws: WebSocket):
     global get_process_list_flag

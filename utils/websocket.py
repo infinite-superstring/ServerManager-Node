@@ -86,15 +86,8 @@ class WebSocket:
                                 seconds=self.__node_config['upload_data_interval'],
                                 args=[self]
                             )
-                            self.__get_process_list_scheduler.add_job(
-                                get_process_list,
-                                'interval',
-                                seconds=self.__node_config['upload_data_interval'],
-                                args=[self]
-                            )
                             # 启动调度任务
                             self.__update_node_usage_scheduler.start()
-                            # self.__get_process_list_scheduler.start()
                         # 初始化虚拟终端
                         case "init_terminal":
                             index = data['data']['index']
@@ -128,6 +121,8 @@ class WebSocket:
                             await start_get_process_list(self)
                         case "stop_get_process_list":
                             await stop_get_process_list()
+                        case "kill_process":
+                            pass
                         case _:
                             logger.error(f'未定义的操作: {data["action"]}')
                 case web.WSMsgType.BINARY:
