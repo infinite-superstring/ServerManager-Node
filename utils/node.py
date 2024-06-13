@@ -150,9 +150,10 @@ async def stop_get_process_list():
     if get_process_list_flag:
         get_process_list_flag = False
 
-async def kii_process(pid, tree_mode):
+async def kill_process(pid, tree_mode):
+    logger.warning("kill_process")
     if pid == os.getpid():
-        raise RuntimeError("won't kill myself")
+        return logger.error("won't kill myself")
     if psutil.pid_exists(pid) and not tree_mode:
         psutil.Process(pid).kill()
     elif psutil.pid_exists(pid) and tree_mode:

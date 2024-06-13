@@ -8,7 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from utils.auth import authenticate
 from utils.logger import logger
 from utils.node import update_node_usage, update_node_info, get_process_list, start_get_process_list, \
-    stop_get_process_list
+    stop_get_process_list, kill_process
 from utils.tty import tty_service
 
 
@@ -122,7 +122,10 @@ class WebSocket:
                         case "stop_get_process_list":
                             await stop_get_process_list()
                         case "kill_process":
-                            pass
+                            pid = data['data']['pid']
+                            tree_mode = data['data'].get('tree_mode', False)
+                            if pid:
+                                await kill_process(pid, tree_mode)
                         case _:
                             logger.error(f'未定义的操作: {data["action"]}')
                 case web.WSMsgType.BINARY:
