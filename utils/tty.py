@@ -77,7 +77,7 @@ class tty_service:
             else:
                 del self.__session[session_id]
         else:
-            raise RuntimeError("Terminal session does not exist")
+            logger.warning('"Terminal session does not exist"')
 
     def close(self):
         temp = list(self.__session.keys())
