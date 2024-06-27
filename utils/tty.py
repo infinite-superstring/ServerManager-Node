@@ -42,7 +42,7 @@ class tty_service:
     def send_command(self, session_id, command):
         if session_id in self.__session:
             if sys.platform != 'win32':
-                self.__session[session_id].send(command + '\n')
+                self.__session[session_id].send(command)
             else:
                 if locale.getpreferredencoding() != 'utf-8':
                     command = command.encode(locale.getpreferredencoding())

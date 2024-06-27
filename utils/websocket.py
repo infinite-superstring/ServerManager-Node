@@ -21,6 +21,7 @@ class WebSocket:
     __tty_service: tty_service = None
     __config = None
 
+
     def __init__(self, session: aiohttp.ClientSession):
         self.__session = session
         self.__update_node_usage_scheduler = AsyncIOScheduler()
