@@ -35,8 +35,6 @@ class config:
 server_host = "127.0.0.1"
 # 服务器端口号
 server_port = 8080
-# 服务器WebSocks路径(非特殊需要请勿修改!!! 默认值: /websocks/node)
-server_path = "/websocks/node"
 # 服务器Token
 server_token = "xxxxxxxx"
 # 启用SSL

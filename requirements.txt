@@ -3,3 +3,4 @@ psutil
 APScheduler
 tomli
 pexpect
+paramiko
