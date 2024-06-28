@@ -2,31 +2,43 @@ import asyncio
 import sys
 import uuid
 import locale
-import pexpect
+from time import sleep
+
 import utils.websocket as WebSocket
 from threading import Thread
-
+from winpty import PTY as WinPty
 from utils.logger import logger
 from utils.terminal import Terminal
 
 
 class tty_service:
+    __terminal: Terminal
     __session: dict[str: any] = {}
     __thread: dict[str: Thread] = {}
-    def create_session(self,host,port,username,password):
+
+    def create_session(self, host=None, port=None, username=None, password=None):
         print("初始化终端")
         """创建终端会话"""
         if sys.platform != 'win32':
-            self.terminal=Terminal()
-            child=self.terminal.start(host,port,username,password)
+            self.__terminal = Terminal()
+            child = self.__terminal.start(host, port, username, password)
+            logger.debug('unix mode')
         else:
-            from pexpect import popen_spawn
-            child = pexpect.popen_spawn.PopenSpawn('cmd')
-
+            logger.debug("win32 mode")
+            win32_terminal = WinPty(cols=80, rows=25)
+            appname = b'C:\\windows\\system32\\cmd.exe'
+            win32_terminal.spawn(appname.decode('utf-8'))
+            child = win32_terminal
+            logger.debug(child)
         session_uuid = str(uuid.uuid1())
         logger.debug(f'create session uuid: {session_uuid}')
         self.__session[session_uuid] = child
         return session_uuid
+
+    def __del__(self):
+        self.close()
+        if self.__terminal:
+            self.__terminal.client.close()
 
     def get_session_list(self):
         """获取会话列表"""
@@ -44,9 +56,10 @@ class tty_service:
             if sys.platform != 'win32':
                 self.__session[session_id].send(command)
             else:
-                if locale.getpreferredencoding() != 'utf-8':
-                    command = command.encode(locale.getpreferredencoding())
-                self.__session[session_id].sendline(command)
+                self.__session[session_id].write(command)
+                # if locale.getpreferredencoding() != 'utf-8':
+                #     command = command.encode(locale.getpreferredencoding())
+                # logger.debug(self.__session[session_id].send(command))
         else:
             raise RuntimeError("终端会话不存在")
 
@@ -55,35 +68,38 @@ class tty_service:
             await ws.websocket_send_json({'action': 'terminal_output', 'data': {'uuid': session_id, "output": data}})
 
         if session_id in self.__session:
-            self.__thread[session_id] = Thread(target=self.__get_terminal_output, args=(session_id, lambda data: asyncio.run(__send(ws, data))))
+            self.__thread[session_id] = Thread(target=self.__get_terminal_output,
+                                               args=(session_id, lambda data: asyncio.run(__send(ws, data))))
             self.__thread[session_id].start()
         else:
             raise RuntimeError("终端会话不存在")
 
     def __get_terminal_output(self, session_id, callback):
+        index = 0
         while self.__session.get(session_id) is not None:
-            try:
-                if sys.platform != 'win32':
-                    if self.__session[session_id].recv_ready():
-                        callback(self.__session[session_id].recv(1024).decode('utf-8'))
-                else:
-                    callback(self.__session[session_id].readline().decode(locale.getpreferredencoding(), errors='ignore'))
+            output = ""
+            if sys.platform != 'win32':
+                if self.__session[session_id].recv_ready():
+                    output = self.__session[session_id].recv(1024).decode('utf-8')
 
-            except pexpect.TIMEOUT:
-                pass
-            except KeyboardInterrupt:
-                return
+            else:
+                output = self.__session[session_id].read()
+
+            if output == "":
+                index += 1
+            else:
+                index = 0
+            if index > 5:
+                sleep(1)
+            callback(output)
 
     def close_session(self, session_id):
         print("关闭终端会话.....")
         """关闭终端会话"""
         if session_id in self.__session:
             if sys.platform != 'win32':
-                self.terminal.client.close()
                 del self.__session[session_id]
             else:
-                self.__session[session_id].terminate(force=True)
-                self.__session[session_id].close()
                 self.__session.pop(session_id)
         else:
             logger.warning('"终端会话关闭"')

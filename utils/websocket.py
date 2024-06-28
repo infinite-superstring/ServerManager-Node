@@ -21,7 +21,6 @@ class WebSocket:
     __tty_service: tty_service = None
     __config = None
 
-
     def __init__(self, session: aiohttp.ClientSession):
         self.__session = session
         self.__update_node_usage_scheduler = AsyncIOScheduler()
@@ -92,12 +91,12 @@ class WebSocket:
                         # 初始化虚拟终端
                         case "init_terminal":
                             index = data['data']['index']
-                            host=data['data']['host']
-                            port=data['data']['port']
-                            username=data['data']['username']
-                            password=data['data']['password']
+                            host = data['data']['host']
+                            port = data['data']['port']
+                            username = data['data']['username']
+                            password = data['data']['password']
                             if self.__config().get("safe").get("connect_terminal"):
-                                tty_session_uuid = self.__tty_service.create_session(host,port,username,password)
+                                tty_session_uuid = self.__tty_service.create_session(host, port, username, password)
                                 logger.debug(f"inti tty succeed; session uuid: {tty_session_uuid}")
                                 await self.websocket_send_json({
                                     "action": "create_terminal_session",

@@ -155,9 +155,15 @@ async def kill_process(pid, tree_mode):
     if pid == os.getpid():
         return logger.error("won't kill myself")
     if psutil.pid_exists(pid) and not tree_mode:
-        psutil.Process(pid).kill()
+        try:
+            psutil.Process(pid).kill()
+        except Exception as e:
+            logger.error(e)
     elif psutil.pid_exists(pid) and tree_mode:
-        kill_proc_tree(pid)
+        try:
+            kill_proc_tree(pid)
+        except Exception as e:
+            logger.error(e)
     else:
         RuntimeError(f"Process {pid} does not exist")
 

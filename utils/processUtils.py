@@ -2,8 +2,7 @@ import os
 import signal
 import psutil
 
-def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True,
-                   timeout=None, on_terminate=None):
+def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True, timeout=None, on_terminate=None):
     """Kill a process tree (including grandchildren) with signal
     "sig" and return a (gone, still_alive) tuple.
     "on_terminate", if specified, is a callback function which is
@@ -18,6 +17,5 @@ def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True,
             p.send_signal(sig)
         except psutil.NoSuchProcess:
             pass
-    gone, alive = psutil.wait_procs(children, timeout=timeout,
-                                    callback=on_terminate)
+    gone, alive = psutil.wait_procs(children, timeout=timeout, callback=on_terminate)
     return (gone, alive)
