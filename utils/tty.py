@@ -90,8 +90,9 @@ class tty_service:
             else:
                 index = 0
             if index > 5:
-                sleep(1)
-            callback(output)
+                sleep(0.02)
+            else:
+                callback(output)
 
     def close_session(self, session_id):
         print("关闭终端会话.....")
