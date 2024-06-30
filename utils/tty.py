@@ -53,6 +53,15 @@ class tty_service:
         else:
             raise RuntimeError("终端会话不存在")
 
+    def resize(self, session_id, cols, rows):
+        if session_id in self.__session:
+            if sys.platform != 'win32':
+                self.__session[session_id].resize_pty(cols, rows)
+            else:
+                self.__session[session_id].resize(cols, rows)
+        else:
+            raise RuntimeError("终端会话不存在")
+
     def send_command(self, session_id, command):
         if session_id in self.__session:
             if sys.platform != 'win32':
@@ -75,13 +84,14 @@ class tty_service:
 
     def __get_terminal_output(self, session_id, callback):
         index = 0
+        if not os.path.exists("terminal_record"):
+            os.mkdir("terminal_record")
         fd = open(str(os.path.join(os.getcwd(), f'terminal_record/{session_id}.txt')), 'w+')
         while self.__session.get(session_id) is not None:
             output = ""
             if sys.platform != 'win32':
                 if self.__session[session_id].recv_ready():
                     output = self.__session[session_id].recv(1024).decode('utf-8')
-
             else:
                 output = self.__session[session_id].read()
 
@@ -92,7 +102,6 @@ class tty_service:
             if index > 5:
                 sleep(0.02)
             else:
-                # print(output, end='')
                 fd.write(output)
                 callback(output)
         fd.close()

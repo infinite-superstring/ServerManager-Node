@@ -121,6 +121,11 @@ class WebSocket:
                             command = data['data']['command']
                             tty_session_uuid = data['data']['uuid']
                             self.__tty_service.send_command(tty_session_uuid, command)
+                        case "terminal:resize":
+                            cols = data['data']['cols']
+                            rows = data['data']['rows']
+                            tty_session_uuid = data['data']['uuid']
+                            self.__tty_service.resize(tty_session_uuid, cols, rows)
                         case "process_list:start":
                             await start_get_process_list(self)
                         case "process_list:stop":

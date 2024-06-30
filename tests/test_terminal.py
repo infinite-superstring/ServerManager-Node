@@ -1,69 +1,56 @@
-import threading
-import paramiko
-import time
+import os
+import pty
+import subprocess
+import select
 
-# 服务器信息
-hostname = '127.0.0.1'
-port = 22  # 默认SSH端口
-username = 'fsj'
-password = '123456'
 
-# 创建一个SSH客户端对象
-client = paramiko.SSHClient()
+def interact_with_subprocess():
+    # 创建伪终端对
+    master_fd, slave_fd = pty.openpty()
 
-# 自动添加主机密钥
-client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    # 启动子进程并将其标准输入/输出/错误重定向到伪终端的从端
+    process = subprocess.Popen(
+        ['/bin/bash'],
+        stdin=slave_fd,
+        stdout=slave_fd,
+        stderr=slave_fd,
+        text=True
+    )
 
-stop_event = threading.Event()
+    # 关闭从端文件描述符
+    os.close(slave_fd)
 
-def send():
     try:
-        while not stop_event.is_set():
-            # 获取用户输入的命令
-            command = input()
+        while True:
+            # 使用 select 监听标准输入和伪终端主端
+            rlist, _, _ = select.select([master_fd, sys.stdin], [], [])
 
-            if command.lower() == 'exit':
-                stop_event.set()
-                break
+            for fd in rlist:
+                if fd == master_fd:
+                    # 从伪终端读取子进程的输出并打印到标准输出
+                    data = os.read(fd, 1024).decode()
+                    if data:
+                        print(data, end='', flush=True)
+                    else:
+                        return
 
-            # 发送命令
-            channel.send(command + '\n')
-    except Exception as e:
-        print(f"Error in send: {e}")
+                elif fd == sys.stdin:
+                    # 从标准输入读取用户输入并写入伪终端
+                    user_input = sys.stdin.read(1)
+                    if user_input:
+                        os.write(master_fd, user_input.encode())
+                    else:
+                        return
+    except KeyboardInterrupt:
+        pass
     finally:
-        # 关闭连接
-        client.close()
+        # 关闭伪终端主端文件描述符
+        os.close(master_fd)
+        process.terminate()
+        process.wait()
 
-def receive():
-    try:
-        while not stop_event.is_set():
-            if channel.recv_ready():
-                output = channel.recv(1024).decode('utf-8')
-                print(output, end="")
-    except Exception as e:
-        print(f"Error in receive: {e}")
 
-if __name__ == '__main__':
-    try:
-        # 连接到服务器
-        client.connect(hostname, port, username, password)
+if __name__ == "__main__":
+    import sys
 
-        # 打开一个伪终端
-        channel = client.invoke_shell()
-        output = channel.recv(1024).decode('utf-8')
-        print(output)
-
-        # 启动接收线程
-        receive_thread = threading.Thread(target=receive)
-        receive_thread.start()
-
-        # 启动发送函数
-        send()
-
-        # 等待接收线程完成
-        receive_thread.join()
-    except Exception as e:
-        print(f"Error in main: {e}")
-    finally:
-        # 确保在程序结束时关闭连接
-        client.close()
+    interact_with_subprocess()
