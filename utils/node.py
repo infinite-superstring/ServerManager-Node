@@ -55,9 +55,9 @@ async def update_node_info(ws: WebSocket):
         "boot_time": datetime.fromtimestamp(psutil.boot_time()).strftime("%Y-%m-%d %H:%M:%S")
     }
     try:
-        await ws.websocket_send_json({'action': 'refresh_node_info', 'data': node_info})
+        await ws.websocket_send_json({'action': 'node:refresh_info', 'data': node_info})
     except Exception as e:
-        logger.error(f"节点信息更新失败！\n{e}")
+        logger.error(f"节点信息更新上传失败！\n{e}")
 
 
 async def get_disk_io_counters(time: int = 1):
@@ -132,7 +132,7 @@ async def update_node_usage(ws: WebSocket):
             "io": node_network_io
         }
     }
-    await ws.websocket_send_json({'action': 'upload_running_data', 'data': node_usage})
+    await ws.websocket_send_json({'action': 'node:upload_running_data', 'data': node_usage})
 
 
 async def start_get_process_list(ws: WebSocket):
@@ -189,7 +189,7 @@ def get_process_list(ws: WebSocket):
             get_process_list_flag = False
         else:
             asyncio.run(
-                ws.websocket_send_json({'action': 'process_list', 'data': {
+                ws.websocket_send_json({'action': 'process_list:show', 'data': {
                     'process_list': temp,
                 }})
             )

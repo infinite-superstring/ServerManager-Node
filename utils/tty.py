@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 import uuid
 import locale
@@ -6,7 +7,8 @@ from time import sleep
 
 import utils.websocket as WebSocket
 from threading import Thread
-from winpty import PTY as WinPty
+if sys.platform == 'win32':
+    from winpty import PTY as WinPty
 from utils.logger import logger
 from utils.terminal import Terminal
 
@@ -37,7 +39,7 @@ class tty_service:
 
     def __del__(self):
         self.close()
-        if self.__terminal:
+        if self.__terminal is not None:
             self.__terminal.client.close()
 
     def get_session_list(self):
@@ -57,15 +59,12 @@ class tty_service:
                 self.__session[session_id].send(command)
             else:
                 self.__session[session_id].write(command)
-                # if locale.getpreferredencoding() != 'utf-8':
-                #     command = command.encode(locale.getpreferredencoding())
-                # logger.debug(self.__session[session_id].send(command))
         else:
             raise RuntimeError("终端会话不存在")
 
     def terminal_output(self, session_id, ws: WebSocket):
         async def __send(ws, data):
-            await ws.websocket_send_json({'action': 'terminal_output', 'data': {'uuid': session_id, "output": data}})
+            await ws.websocket_send_json({'action': 'terminal:output', 'data': {'uuid': session_id, "output": data}})
 
         if session_id in self.__session:
             self.__thread[session_id] = Thread(target=self.__get_terminal_output,
@@ -76,6 +75,7 @@ class tty_service:
 
     def __get_terminal_output(self, session_id, callback):
         index = 0
+        fd = open(str(os.path.join(os.getcwd(), f'terminal_record/{session_id}.txt')), 'w+')
         while self.__session.get(session_id) is not None:
             output = ""
             if sys.platform != 'win32':
@@ -92,16 +92,17 @@ class tty_service:
             if index > 5:
                 sleep(0.02)
             else:
+                # print(output, end='')
+                fd.write(output)
                 callback(output)
+        fd.close()
+        logger.debug(f'session {session_id} get output stop')
 
     def close_session(self, session_id):
         print("关闭终端会话.....")
         """关闭终端会话"""
         if session_id in self.__session:
-            if sys.platform != 'win32':
-                del self.__session[session_id]
-            else:
-                self.__session.pop(session_id)
+            del self.__session[session_id]
         else:
             logger.warning('"终端会话关闭"')
 

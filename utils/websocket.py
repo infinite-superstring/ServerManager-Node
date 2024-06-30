@@ -89,7 +89,7 @@ class WebSocket:
                             # 启动调度任务
                             self.__update_node_usage_scheduler.start()
                         # 初始化虚拟终端
-                        case "init_terminal":
+                        case "terminal:create_session":
                             index = data['data']['index']
                             host = data['data']['host']
                             port = data['data']['port']
@@ -99,7 +99,7 @@ class WebSocket:
                                 tty_session_uuid = self.__tty_service.create_session(host, port, username, password)
                                 logger.debug(f"inti tty succeed; session uuid: {tty_session_uuid}")
                                 await self.websocket_send_json({
-                                    "action": "create_terminal_session",
+                                    "action": "terminal:return_session",
                                     "data": {
                                         "uuid": tty_session_uuid,
                                         "index": index
@@ -108,24 +108,24 @@ class WebSocket:
                                 self.__tty_service.terminal_output(tty_session_uuid, self)
                             else:
                                 await self.websocket_send_json({
-                                    "action": "safe:Terminal_connection_not_enabled",
+                                    "action": "safe:Terminal_not_enabled",
                                     "msg": "终端连接未启用",
                                     "data": {
                                         "index": index
                                     }
                                 })
-                        case "close_terminal":
+                        case "terminal:close_session":
                             tty_session_uuid = data['data']['uuid']
                             self.__tty_service.close_session(tty_session_uuid)
-                        case "input_command":
+                        case "terminal:input":
                             command = data['data']['command']
                             tty_session_uuid = data['data']['uuid']
                             self.__tty_service.send_command(tty_session_uuid, command)
-                        case "start_get_process_list":
+                        case "process_list:start":
                             await start_get_process_list(self)
-                        case "stop_get_process_list":
+                        case "process_list:stop":
                             await stop_get_process_list()
-                        case "kill_process":
+                        case "process_list:kill":
                             pid = data['data']['pid']
                             tree_mode = data['data'].get('tree_mode', False)
                             if pid:
