@@ -97,6 +97,7 @@ class WebSocket:
                             password = data['data']['password']
                             if self.__config().get("safe").get("connect_terminal"):
                                 tty_session_uuid = self.__tty_service.create_session(host, port, username, password)
+                                print(f"tty是{tty_session_uuid}")
                                 logger.debug(f"inti tty succeed; session uuid: {tty_session_uuid}")
                                 await self.websocket_send_json({
                                     "action": "terminal:return_session",

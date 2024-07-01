@@ -9,8 +9,10 @@ import utils.websocket as WebSocket
 from threading import Thread
 if sys.platform == 'win32':
     from winpty import PTY as WinPty
+    Terminal=None
+else:
+    from utils.terminal import Terminal
 from utils.logger import logger
-from utils.terminal import Terminal
 
 
 class tty_service:
@@ -28,7 +30,8 @@ class tty_service:
         else:
             logger.debug("win32 mode")
             win32_terminal = WinPty(cols=80, rows=25)
-            appname = b'C:\\windows\\system32\\cmd.exe'
+            # appname = b'C:\\windows\\system32\\cmd.exe'
+            appname = b'C:\\windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe'
             win32_terminal.spawn(appname.decode('utf-8'))
             child = win32_terminal
             logger.debug(child)
