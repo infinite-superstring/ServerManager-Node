@@ -7,7 +7,7 @@ class Terminal():
         self.client= paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-    def start(self,hostname, port, username, password):
+    def start(self, hostname, port, username, password):
         try:
             # 连接到服务器
             self.client.connect(hostname, port, username, password)
