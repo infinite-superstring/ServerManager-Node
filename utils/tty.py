@@ -86,7 +86,7 @@ class tty_service:
             raise RuntimeError("终端会话不存在")
 
     def __get_terminal_output(self, session_id, callback):
-        index = 0
+        # index = 0
         if not os.path.exists("terminal_record"):
             os.mkdir("terminal_record")
         fd = open(str(os.path.join(os.getcwd(), f'terminal_record/{session_id}.txt')), 'w+')
@@ -98,15 +98,20 @@ class tty_service:
             else:
                 output = self.__session[session_id].read()
 
-            if output == "":
-                index += 1
-            else:
-                index = 0
-            if index > 5:
-                sleep(0.02)
-            else:
+            # if output == "":
+            #     index += 1
+            # else:
+            #     index = 0
+            # if index > 5:
+            #     sleep(0.02)
+            # else:
+            #     fd.write(output)
+            #     callback(output)
+            if output != "":
                 fd.write(output)
                 callback(output)
+            else:
+                sleep(0.02)
         fd.close()
         logger.debug(f'session {session_id} get output stop')
 
