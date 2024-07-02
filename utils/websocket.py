@@ -96,13 +96,14 @@ class WebSocket:
                             username = data['data']['username']
                             password = data['data']['password']
                             if self.__config().get("safe").get("connect_terminal"):
-                                tty_session_uuid = self.__tty_service.create_session(host, port, username, password)
+                                tty_session_uuid,login_status = self.__tty_service.create_session(host, port, username, password)
                                 print(f"tty是{tty_session_uuid}")
                                 logger.debug(f"inti tty succeed; session uuid: {tty_session_uuid}")
                                 await self.websocket_send_json({
                                     "action": "terminal:return_session",
                                     "data": {
                                         "uuid": tty_session_uuid,
+                                        "login_status": login_status,
                                         "index": index
                                     }
                                 })
@@ -123,8 +124,8 @@ class WebSocket:
                             tty_session_uuid = data['data']['uuid']
                             self.__tty_service.send_command(tty_session_uuid, command)
                         case "terminal:resize":
-                            cols = data['data']['cols']
-                            rows = data['data']['rows']
+                            cols = int(data['data']['cols'])
+                            rows = int(data['data']['rows'])
                             tty_session_uuid = data['data']['uuid']
                             self.__tty_service.resize(tty_session_uuid, cols, rows)
                         case "process_list:start":

@@ -23,9 +23,11 @@ class tty_service:
     def create_session(self, host=None, port=None, username=None, password=None):
         print("初始化终端")
         """创建终端会话"""
+        is_loin=False
         if sys.platform != 'win32':
             self.__terminal = Terminal()
             child = self.__terminal.start(host, port, username, password)
+            is_loin=True
             logger.debug('unix mode')
         else:
             logger.debug("win32 mode")
@@ -34,11 +36,12 @@ class tty_service:
             appname = b'C:\\windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe'
             win32_terminal.spawn(appname.decode('utf-8'))
             child = win32_terminal
+            is_loin=True
             logger.debug(child)
         session_uuid = str(uuid.uuid1())
         logger.debug(f'create session uuid: {session_uuid}')
         self.__session[session_uuid] = child
-        return session_uuid
+        return session_uuid,is_loin
 
     def __del__(self):
         self.close()
@@ -57,11 +60,12 @@ class tty_service:
             raise RuntimeError("终端会话不存在")
 
     def resize(self, session_id, cols, rows):
+        print(f"行{rows}列{cols}")
         if session_id in self.__session:
             if sys.platform != 'win32':
                 self.__session[session_id].resize_pty(cols, rows)
             else:
-                self.__session[session_id].resize(cols, rows)
+                self.__session[session_id].set_size(cols, rows)
         else:
             raise RuntimeError("终端会话不存在")
 
