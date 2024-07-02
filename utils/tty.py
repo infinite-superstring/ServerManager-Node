@@ -21,27 +21,35 @@ class tty_service:
     __thread: dict[str: Thread] = {}
 
     def create_session(self, host=None, port=None, username=None, password=None):
+        is_login=None
         print("初始化终端")
         """创建终端会话"""
-        is_loin=False
+        child=None
         if sys.platform != 'win32':
-            self.__terminal = Terminal()
-            child = self.__terminal.start(host, port, username, password)
-            is_loin=True
-            logger.debug('unix mode')
+            try:
+                self.__terminal = Terminal()
+                child = self.__terminal.start(host, port, username, password)
+                logger.debug('unix mode')
+                if child:
+                    is_login = True
+            except Exception as e:
+                is_login = False
         else:
-            logger.debug("win32 mode")
-            win32_terminal = WinPty(cols=80, rows=25)
-            # appname = b'C:\\windows\\system32\\cmd.exe'
-            appname = b'C:\\windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe'
-            win32_terminal.spawn(appname.decode('utf-8'))
-            child = win32_terminal
-            is_loin=True
-            logger.debug(child)
+            try:
+                logger.debug("win32 mode")
+                win32_terminal = WinPty(cols=80, rows=25)
+                # appname = b'C:\\windows\\system32\\cmd.exe'
+                appname = b'C:\\windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe'
+                win32_terminal.spawn(appname.decode('utf-8'))
+                child = win32_terminal
+                is_login=True
+                logger.debug(child)
+            except Exception as e:
+                is_login = False
         session_uuid = str(uuid.uuid1())
         logger.debug(f'create session uuid: {session_uuid}')
         self.__session[session_uuid] = child
-        return session_uuid,is_loin
+        return session_uuid,is_login
 
     def __del__(self):
         self.close()
@@ -60,7 +68,6 @@ class tty_service:
             raise RuntimeError("终端会话不存在")
 
     def resize(self, session_id, cols, rows):
-        print(f"行{rows}列{cols}")
         if session_id in self.__session:
             if sys.platform != 'win32':
                 self.__session[session_id].resize_pty(cols, rows)
@@ -96,12 +103,20 @@ class tty_service:
         fd = open(str(os.path.join(os.getcwd(), f'terminal_record/{session_id}.txt')), 'w+')
         while self.__session.get(session_id) is not None:
             output = ""
+            is_out_put=False
             if sys.platform != 'win32':
-                if self.__session[session_id].recv_ready():
-                    output = self.__session[session_id].recv(1024).decode('utf-8')
+                try:
+                    if self.__session[session_id].recv_ready():
+                        output = self.__session[session_id].recv(1024).decode('utf-8')
+                        is_out_put = True
+                except:
+                    is_out_put = False
             else:
-                output = self.__session[session_id].read()
-
+                try:
+                    output = self.__session[session_id].read()
+                    is_out_put = True
+                except:
+                    is_out_put = False
             # if output == "":
             #     index += 1
             # else:
@@ -111,7 +126,8 @@ class tty_service:
             # else:
             #     fd.write(output)
             #     callback(output)
-            if output != "":
+            # if output != "":
+            if is_out_put:
                 fd.write(output)
                 callback(output)
             else:
