@@ -49,6 +49,7 @@ class tty_service:
         session_uuid = str(uuid.uuid1())
         logger.debug(f'create session uuid: {session_uuid}')
         self.__session[session_uuid] = child
+        print('登录？',is_login)
         return session_uuid,is_login
 
     def __del__(self):
