@@ -81,9 +81,9 @@ class tty_service:
         else:
             raise RuntimeError("终端会话不存在")
 
-    def send_command(self, session_id, command, __is_login=None):
+    def send_command(self, session_id, command, ):
         if session_id in self.__session:
-            if __is_login:
+            if self.__is_login:
                 if sys.platform != 'win32':
                     self.__session[session_id].send(command)
                 else:
