@@ -62,89 +62,126 @@ class WebSocket:
             match msg.type:
                 case web.WSMsgType.TEXT:
                     data = json.loads(msg.data)
-                    print(data)
-                    if not data.get('action'):
+                    action = data.get('action')
+
+                    actions = {
+                        "node:close": self._close,
+                        "node:init_config": self._init_node_config,
+                        "terminal:create_session": self._terminal__create_session,
+                        "terminal:close_session": self._terminal__close_session,
+                        "terminal:input": self._terminal__input,
+                        "terminal:resize": self._terminal__resize,
+                        "process_list:start": self._process_list__start,
+                        "process_list:kill": self._process_list__kill,
+                    }
+
+                    if action not in actions.keys():
+                        logger.error(f"Undefined action: {action}")
                         return
-                    match data['action']:
-                        # 关闭节点端
-                        case 'close':
-                            logger.info(f'Close......')
-                            self.__update_node_usage_scheduler.shutdown()
-                            self.__get_process_list_scheduler.shutdown()
-                            await stop_get_process_list()
-                            return exit(0)
-                        # 初始化节点配置
-                        case 'init_node_config':
-                            logger.info(f'Init node config....')
-                            await update_node_info(self)
-                            self.__node_config = data['data']
-                            # 添加调度任务
-                            # 调度方法为 update_node_usage，触发器选择 interval(间隔性)，间隔时长为 2 秒
-                            self.__update_node_usage_scheduler.add_job(
-                                update_node_usage,
-                                'interval',
-                                seconds=self.__node_config['upload_data_interval'],
-                                args=[self]
-                            )
-                            # 启动调度任务
-                            self.__update_node_usage_scheduler.start()
-                        # 初始化虚拟终端
-                        case "terminal:create_session":
-                            index = data['data']['index']
-                            host = data['data']['host']
-                            port = data['data']['port']
-                            username = data['data']['username']
-                            password = data['data']['password']
-                            if self.__config().get("safe").get("connect_terminal"):
-                                tty_session_uuid,login_status = self.__tty_service.create_session(host, port, username, password)
-                                logger.debug(f"inti tty succeed; session uuid: {tty_session_uuid}")
-                                await self.websocket_send_json({
-                                    "action": "terminal:return_session",
-                                    "data": {
-                                        "uuid": tty_session_uuid,
-                                        "login_status": login_status,
-                                        "index": index
-                                    }
-                                })
-                                self.__tty_service.terminal_output(tty_session_uuid, self)
-                            else:
-                                await self.websocket_send_json({
-                                    "action": "safe:Terminal_not_enabled",
-                                    "msg": "终端连接未启用",
-                                    "data": {
-                                        "index": index
-                                    }
-                                })
-                        case "terminal:close_session":
-                            tty_session_uuid = data['data']['uuid']
-                            self.__tty_service.close_session(tty_session_uuid)
-                        case "terminal:input":
-                            command = data['data']['command']
-                            tty_session_uuid = data['data']['uuid']
-                            self.__tty_service.send_command(tty_session_uuid, command)
-                        case "terminal:resize":
-                            cols = int(data['data']['cols'])
-                            rows = int(data['data']['rows'])
-                            tty_session_uuid = data['data']['uuid']
-                            self.__tty_service.resize(tty_session_uuid, cols, rows)
-                        case "process_list:start":
-                            await start_get_process_list(self)
-                        case "process_list:stop":
-                            await stop_get_process_list()
-                        case "process_list:kill":
-                            pid = data['data']['pid']
-                            tree_mode = data['data'].get('tree_mode', False)
-                            if pid:
-                                await kill_process(pid, tree_mode)
-                        case _:
-                            logger.error(f'未定义的操作: {data["action"]}')
+                    await actions[action](data.get('data'))
                 case web.WSMsgType.BINARY:
                     pass
                 case web.WSMsgType.CLOSE:
                     self.__update_node_usage_scheduler.shutdown()
                     self.__update_node_usage_scheduler.shutdown()
                     logger.info("连接已断开")
-            await asyncio.sleep(0.2)
+            # await asyncio.sleep(0.2)
+
+    async def _close(self, payload=None):
+        """关闭节点端"""
+        logger.info(f'Close......')
+        self.__update_node_usage_scheduler.shutdown()
+        self.__get_process_list_scheduler.shutdown()
+        await stop_get_process_list()
+        return exit(0)
+
+    async def _init_node_config(self, payload=None):
+        """初始化节点配置"""
+        logger.debug(f'Init node config....')
+        await update_node_info(self)
+        self.__node_config = payload
+        await self._start_node_usage_upload_task()
+        logger.info("node ready!")
+
+    async def _terminal__create_session(self, payload=None):
+        """创建终端Session"""
+        index = payload['index']
+        host = payload['host']
+        port = payload['port']
+        username = payload['username']
+        password = payload['password']
+        if self.__config().get("safe").get("connect_terminal") is False:
+            await self.websocket_send_json({
+                "action": "safe:Terminal_not_enabled",
+                "msg": "终端连接未启用",
+                "data": {
+                    "index": index
+                }
+            })
+        tty_session_uuid, login_status = self.__tty_service.create_session(host, port, username, password)
+        if login_status:
+            logger.debug(f"inti tty succeed; session uuid: {tty_session_uuid}")
+            await self.websocket_send_json({
+                "action": "terminal:return_session",
+                "data": {
+                    "uuid": tty_session_uuid,
+                    "index": index
+                }
+            })
+            # 获取终端输出
+            self.__tty_service.terminal_output(tty_session_uuid, self)
+            return
+        await self.websocket_send_json({
+            "action": "terminal:login_failed",
+            "data": {
+                "index": index
+            }
+        })
+
+    async def _terminal__close_session(self, payload=None):
+        """关闭终端会话"""
+        tty_session_uuid = payload['uuid']
+        self.__tty_service.close_session(tty_session_uuid)
+
+    async def _terminal__input(self, payload=None):
+        """向终端发送信息"""
+        command = payload['command']
+        tty_session_uuid = payload['uuid']
+        self.__tty_service.send_command(tty_session_uuid, command)
+
+    async def _terminal__resize(self, payload=None):
+        """调整节点终端大小"""
+        cols = payload['cols']
+        rows = payload['rows']
+        tty_session_uuid = payload['uuid']
+        self.__tty_service.resize(tty_session_uuid, cols, rows)
+
+    async def _process_list__start(self, payload=None):
+        """开始获取进程列表"""
+        await start_get_process_list(self)
+
+    async def _process_list__stop(self, payload=None):
+        """停止获取节点列表"""
+        await stop_get_process_list()
+
+    async def _process_list__kill(self, payload=None):
+        """杀死一个进程"""
+        pid = payload['pid']
+        tree_mode = payload.get('tree_mode', False)
+        if pid:
+            await kill_process(pid, tree_mode)
+
+    async def _start_node_usage_upload_task(self):
+        """启动调度器：上传节点状态"""
+        # 调度方法为 update_node_usage，触发器选择 interval(间隔性)，间隔时长为 2 秒
+        self.__update_node_usage_scheduler.add_job(
+            update_node_usage,
+            'interval',
+            seconds=self.__node_config['upload_data_interval'],
+            args=[self]
+        )
+        # 启动调度任务
+        self.__update_node_usage_scheduler.start()
 
     async def websocket_send_json(self, data: dict):
         try:

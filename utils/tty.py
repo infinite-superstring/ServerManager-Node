@@ -10,7 +10,6 @@ from threading import Thread
 
 if sys.platform == 'win32':
     from winpty import PTY as WinPty
-
     Terminal = None
 else:
     from utils.terminal import Terminal
@@ -21,39 +20,35 @@ class tty_service:
     __terminal: Terminal
     __session: dict[str: any] = {}
     __thread: dict[str: Thread] = {}
-    __is_login = False
 
     def create_session(self, host=None, port=None, username=None, password=None):
         print("初始化终端")
         """创建终端会话"""
         child = None
-        self.__is_login=False
+        login_status = False
         if sys.platform != 'win32':
-            try:
-                self.__terminal = Terminal()
-                child = self.__terminal.start(host, port, username, password)
-                logger.debug('unix mode')
-                if child:
-                    self.__is_login = True
-            except Exception as e:
-                self.__is_login = False
+            self.__terminal = Terminal()
+            child = self.__terminal.start(host, port, username, password)
+            logger.debug('unix mode')
+            if child is False:
+                logger.warning("终端登录失败")
+            else:
+                login_status = True
         else:
-            try:
-                logger.debug("win32 mode")
-                win32_terminal = WinPty(cols=80, rows=25)
-                # appname = b'C:\\windows\\system32\\cmd.exe'
-                appname = b'C:\\windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe'
-                win32_terminal.spawn(appname.decode('utf-8'))
-                child = win32_terminal
-                self.__is_login = True
-                logger.debug(child)
-            except Exception as e:
-                self.__is_login = False
+            logger.debug("win32 mode")
+            win32_terminal = WinPty(cols=80, rows=25)
+            # appname = b'C:\\windows\\system32\\cmd.exe'
+            appname = b'C:\\windows\\system32\\WindowsPowerShell\\v1.0\\powershell.exe'
+            win32_terminal.spawn(appname.decode('utf-8'))
+            child = win32_terminal
+            login_status = True
         session_uuid = str(uuid.uuid1())
-        logger.debug(f'create session uuid: {session_uuid}')
-        self.__session[session_uuid] = child
-        print('登录？', self.__is_login)
-        return session_uuid, self.__is_login
+        if login_status:
+            self.__session[session_uuid] = child
+            logger.debug(f'create session uuid: {session_uuid}')
+        else:
+            del child
+        return session_uuid, login_status
 
     def __del__(self):
         self.close()
@@ -73,21 +68,19 @@ class tty_service:
 
     def resize(self, session_id, cols, rows):
         if session_id in self.__session:
-            if self.__is_login:
-                if sys.platform != 'win32':
-                    self.__session[session_id].resize_pty(cols, rows)
-                else:
-                    self.__session[session_id].set_size(cols, rows)
+            if sys.platform != 'win32':
+                self.__session[session_id].resize_pty(cols, rows)
+            else:
+                self.__session[session_id].set_size(cols, rows)
         else:
             raise RuntimeError("终端会话不存在")
 
-    def send_command(self, session_id, command, ):
+    def send_command(self, session_id, command):
         if session_id in self.__session:
-            if self.__is_login:
-                if sys.platform != 'win32':
-                    self.__session[session_id].send(command)
-                else:
-                    self.__session[session_id].write(command)
+            if sys.platform != 'win32':
+                self.__session[session_id].send(command)
+            else:
+                self.__session[session_id].write(command)
         else:
             raise RuntimeError("终端会话不存在")
 
@@ -103,37 +96,20 @@ class tty_service:
             raise RuntimeError("终端会话不存在")
 
     def __get_terminal_output(self, session_id, callback):
-        # index = 0
         if not os.path.exists("terminal_record"):
             os.mkdir("terminal_record")
         fd = open(str(os.path.join(os.getcwd(), f'terminal_record/{session_id}.txt')), 'w+')
         while self.__session.get(session_id) is not None:
             output = ""
-            is_out_put = False
             if sys.platform != 'win32':
-                try:
-                    if self.__session[session_id].recv_ready():
+                if self.__session[session_id].recv_ready():
+                    try:
                         output = self.__session[session_id].recv(1024).decode('utf-8')
-                        is_out_put = True
-                except:
-                    is_out_put = False
+                    except Exception as e:
+                        logger.error(f"[Session: {session_id}] Get terminal output error! {e}")
             else:
-                try:
-                    output = self.__session[session_id].read()
-                    is_out_put = True
-                except:
-                    is_out_put = False
-            # if output == "":
-            #     index += 1
-            # else:
-            #     index = 0
-            # if index > 5:
-            #     sleep(0.02)
-            # else:
-            #     fd.write(output)
-            #     callback(output)
-            # if output != "":
-            if is_out_put:
+                output = self.__session[session_id].read()
+            if output != "":
                 fd.write(output)
                 callback(output)
             else:

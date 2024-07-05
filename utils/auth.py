@@ -18,6 +18,6 @@ async def authenticate(session, auth_path, auth_data):
                 logger.error(f"认证失败: {data['msg']}({data['status']})")
                 exit(1)
         except Exception as e:
-            print(e)
-            logger.error(f"服务端返回了无效消息：\n{await resp.text()}(http code:{resp.status})")
-            exit(1)
+            # print(e)
+            logger.error(f"服务端返回了无效消息：{await resp.text()}(http code:{resp.status})")
+            # exit(1)
