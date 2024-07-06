@@ -10,6 +10,7 @@ from utils.logger import logger
 from utils.node import update_node_usage, update_node_info, get_process_list, start_get_process_list, \
     stop_get_process_list, kill_process
 from utils.tty import tty_service
+from utils.shellTaskUtils import shellTaskUtils
 
 
 class WebSocket:
@@ -19,6 +20,7 @@ class WebSocket:
     __get_process_list_scheduler: AsyncIOScheduler = None
     __node_config: dict
     __tty_service: tty_service = None
+    __shell_task_service: shellTaskUtils = None
     __config = None
 
     def __init__(self, session: aiohttp.ClientSession):
@@ -26,6 +28,7 @@ class WebSocket:
         self.__update_node_usage_scheduler = AsyncIOScheduler()
         self.__get_process_list_scheduler = AsyncIOScheduler()
         self.__tty_service = tty_service()
+        self.__shell_task_service = shellTaskUtils(self)
 
     async def websocket_connect(self):
         from utils.config import config
@@ -63,7 +66,7 @@ class WebSocket:
                 case web.WSMsgType.TEXT:
                     data = json.loads(msg.data)
                     action = data.get('action')
-
+                    logger.debug(f"action: {action} data: {data.get('data')}")
                     actions = {
                         "node:close": self._close,
                         "node:init_config": self._init_node_config,
@@ -73,6 +76,9 @@ class WebSocket:
                         "terminal:resize": self._terminal__resize,
                         "process_list:start": self._process_list__start,
                         "process_list:kill": self._process_list__kill,
+                        "task:add": self._add_task,
+                        "task:remove": self._remove_task,
+                        "task:reload": self._reload_task,
                     }
 
                     if action not in actions.keys():
@@ -101,6 +107,8 @@ class WebSocket:
         await update_node_info(self)
         self.__node_config = payload
         await self._start_node_usage_upload_task()
+        # 加载任务列表
+        self.__shell_task_service.init_task_list(self.__node_config.get('task'))
         logger.info("node ready!")
 
     async def _terminal__create_session(self, payload=None):
@@ -183,8 +191,21 @@ class WebSocket:
         # 启动调度任务
         self.__update_node_usage_scheduler.start()
 
+    async def _add_task(self, data: dict):
+        """添加任务"""
+        self.__shell_task_service.add_task(data)
+
+    async def _remove_task(self, data):
+        """删除一个任务"""
+        self.__shell_task_service.remove_task(data)
+
+    async def _reload_task(self, data):
+        """重载一个任务"""
+        self.__shell_task_service.reload_task(data)
+
     async def websocket_send_json(self, data: dict):
         try:
+            logger.debug(f"send: {data}")
             await self.__ws.send_str(json.dumps(data))
         except ConnectionResetError as e:
             logger.error(e)
