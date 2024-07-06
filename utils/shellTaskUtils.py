@@ -263,6 +263,19 @@ class shellTaskUtils:
                 minutes = (exec_time % 3600) // 60
                 logger.debug(f"hour: {hours} minute: {minutes}")
                 print(uuid)
+                if exec_count:
+                    self.__scheduler.add_job(
+                        self.__run_shell,
+                        args=[shell, uuid, cwd],
+                        id=uuid,
+                        name=uuid,
+                        trigger='cron',
+                        day_of_week=self.__handle_week(exec_week),
+                        hour=hours,
+                        minute=minutes,
+                        max_instances=exec_count
+                    )
+                    return True
                 self.__scheduler.add_job(
                     self.__run_shell,
                     args=[shell, uuid, cwd],
@@ -272,7 +285,6 @@ class shellTaskUtils:
                     day_of_week=self.__handle_week(exec_week),
                     hour=hours,
                     minute=minutes
-                    # max_instances=exec_count
                 )
                 return True
             case "interval":
