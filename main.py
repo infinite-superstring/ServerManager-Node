@@ -4,6 +4,7 @@ import aiohttp
 
 from utils.config import config
 from utils.websocket import WebSocket
+from utils.model import database, Task
 
 # config = config().get_config
 ws: WebSocket
@@ -18,4 +19,5 @@ async def main():
 
 
 if __name__ == '__main__':
+    database.create_tables([Task])
     asyncio.run(main())

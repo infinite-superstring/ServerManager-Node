@@ -12,6 +12,7 @@ import time
 import sys
 import utils.websocket as websocket
 from utils.logger import logger
+from utils.model import Task
 
 class shellTaskUtils:
     __websocket: websocket
@@ -106,16 +107,23 @@ class shellTaskUtils:
             exec_cycle: dict 运行周期
             exec_count: 运行次数
             """
-            logger.info(f"初始化任务: {task.get('name')}")
+            task_uuid = task.get('uuid')
+            logger.info(f"初始化任务: {task_uuid}")
             self.__handle_start_task(
-                uuid=task.get('uuid'),
+                uuid=task_uuid,
                 exec_type=task.get('type'),
                 shell=task.get('shell'),
                 cwd=task.get("exec_path"),
                 exec_time=task.get('time'),
                 exec_week=task.get('week'),
-                exec_count=task.get('count')
+                exec_count=task.get('exec_count')
             )
+            if not self.__task_exists(task_uuid):
+                Task.create(
+                    name=task.get('name'),
+                    uuid=task_uuid,
+                    max_count=task.get('exec_count') if task.get('exec_count') !=0 else 0
+                )
         self.__scheduler.start()
 
     def add_task(self, task):
@@ -132,14 +140,20 @@ class shellTaskUtils:
             cwd=task.get("exec_path"),
             exec_time=task.get('time'),
             exec_week=task.get('week'),
-            exec_count=task.get('count')
+            exec_count=task.get('exec_count')
         )
+        print(task.get('exec_count'))
+        if not self.__task_exists(task_uuid):
+            Task.create(
+                name=task.get('name'),
+                uuid=task_uuid,
+                max_count=task.get('exec_count') if task.get('exec_count') != 0 else 0
+            )
         return True
 
     def remove_task(self, task_uuid):
         """使用UUID删除任务"""
         logger.info(f"删除任务：{task_uuid}")
-        # print(self.__scheduler.get_job(task_uuid))
         if not self.__scheduler.get_job(task_uuid):
             logger.warning(f"任务uuid: {task_uuid}不存在")
             return False
@@ -160,7 +174,7 @@ class shellTaskUtils:
             cwd=task.get("exec_path"),
             exec_time=task.get('time'),
             exec_week=task.get('week'),
-            exec_count=task.get('count')
+            exec_count=task.get('exec_count')
         )
         return True
 
@@ -176,6 +190,12 @@ class shellTaskUtils:
         save_path = os.path.join(self.__record_path, uuid)
         if not os.path.exists(save_path):
             os.mkdir(save_path)
+
+        task_model = self.__get_task(uuid)
+        if task_model.max_count and task_model.max_count != 0 and task_model.count >= task_model.max_count:
+            self.remove_task(uuid)
+            return
+
         logger.debug(f"run shell script: {uuid}")
         script += "\nreturn 0" if sys.platform != 'win32' else "\nexit /b 0"
         # 执行多行 shell 脚本，设置 shell=True 并使用 bash 解释器执行
@@ -188,6 +208,8 @@ class shellTaskUtils:
         process_mark_uuid = str(uuid1())
         self.__process_mark[uuid] = process_mark_uuid
         self.__record_fd[uuid] = open(os.path.join(save_path, process_mark_uuid), "w+")
+        task_model.count += 1
+        task_model.save()
         self.__send_websocket_action('task:process_start', {
             'uuid': uuid,
             'mark': process_mark_uuid,
@@ -199,17 +221,15 @@ class shellTaskUtils:
                 target=self.__get_process_output,
                 args=()
             )
+
         # 如果线程未启动则启动线程
         # print(self.__get_process_thread.is_alive())
         if not self.__get_process_thread.is_alive():
-            self.__get_process_thread = Thread(
-                target=self.__get_process_output,
-                args=()
-            )
             self.__get_process_thread.start()
 
     def __get_process_output(self):
         """获取所有进程输出"""
+        logger.debug("获取进程输出开始")
         while len(self.__process_list) > 0:
             close_list = []
             for i in self.__process_list:
@@ -241,6 +261,8 @@ class shellTaskUtils:
                 self.__record_fd[i].close()
 
             time.sleep(0.2)
+        logger.debug("获取进程输出结束")
+        self.__get_process_thread=None
 
     def __handle_start_task(self, uuid: str, exec_type: str, shell: str, cwd: str = None, exec_time: int = None,
                             exec_week: list[int] = None, exec_count: int = None) -> bool:
@@ -337,3 +359,14 @@ class shellTaskUtils:
                 'data': payload
             },)).start()
 
+    def __get_task(self, uuid):
+        query = Task.select().where(Task.uuid == uuid)
+        if query.exists():
+            return query.get()  # 获取具体的 Task 对象
+            # 处理找到的 task 对象
+        else:
+            logger.warning(f'Task with uuid {uuid} does not exist.')
+
+    def __task_exists(self, uuid):
+        """任务是否已存在于数据库中"""
+        return Task.select().where(Task.uuid == uuid).exists()
