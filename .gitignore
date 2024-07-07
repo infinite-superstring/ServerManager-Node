@@ -10,3 +10,4 @@
 /static/
 /dumpdata.json
 /config.toml
+/data/*

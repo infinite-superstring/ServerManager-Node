@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os.path
 
 import aiohttp
 from aiohttp import web, ClientWebSocketResponse
@@ -22,8 +23,13 @@ class WebSocket:
     __tty_service: tty_service = None
     __shell_task_service: shellTaskUtils = None
     __config = None
+    __data_path: str
 
     def __init__(self, session: aiohttp.ClientSession):
+        # 初始化数据存储路径
+        self.__data_path = os.path.join(os.getcwd(), "data")
+        if not os.path.exists(self.__data_path):
+            os.mkdir(self.__data_path)
         self.__session = session
         self.__update_node_usage_scheduler = AsyncIOScheduler()
         self.__get_process_list_scheduler = AsyncIOScheduler()
@@ -66,7 +72,7 @@ class WebSocket:
                 case web.WSMsgType.TEXT:
                     data = json.loads(msg.data)
                     action = data.get('action')
-                    logger.debug(f"action: {action} data: {data.get('data')}")
+                    logger.debug(f"action:{action} data:{data.get('data')}")
                     actions = {
                         "node:close": self._close,
                         "node:init_config": self._init_node_config,
@@ -205,7 +211,7 @@ class WebSocket:
 
     async def websocket_send_json(self, data: dict):
         try:
-            logger.debug(f"send: {data}")
+            # logger.debug(f"send: {data}")
             await self.__ws.send_str(json.dumps(data))
         except ConnectionResetError as e:
             logger.error(e)
@@ -214,3 +220,7 @@ class WebSocket:
             await stop_get_process_list()
             await self.__ws.close()
             logger.info('Stop WebSocket...')
+
+    def get_base_data_save_path(self):
+        """获取基本数据保存路径"""
+        return self.__data_path

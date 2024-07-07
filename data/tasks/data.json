@@ -1,0 +1,22 @@
+{
+  "任务uuid": {
+    "count": 5,
+    "run_data": {
+      "执行uuid": {
+        "start": "开始时间",
+        "end": "结束时间",
+        "code": "int 执行返回值"
+      },
+      "执行uuid": {
+        "start": "开始时间",
+        "end": "结束时间",
+        "code": "int 执行返回值"
+      },
+      "执行uuid": {
+        "start": "开始时间",
+        "end": "结束时间",
+        "code": "int 执行返回值"
+      }
+    }
+  }
+}

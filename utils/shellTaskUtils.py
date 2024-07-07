@@ -2,13 +2,14 @@ import os.path
 import asyncio
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+from tzlocal import get_localzone
 from threading import Thread
 from datetime import datetime
 from uuid import uuid1
 
 import subprocess
 import time
+import sys
 import utils.websocket as websocket
 from utils.logger import logger
 
@@ -18,13 +19,18 @@ class shellTaskUtils:
     __process_list: dict[str: subprocess.Popen] = {}
     __process_mark: dict[str:str] = {}
     __get_process_thread: Thread = None
+    __data_path: str
+    __record_path: str
+    __record_fd: dict[str:any] = {}
 
     def __init__(self, ws: websocket):
         """
         初始化节点任务工具
         """
         self.__websocket = ws
-        self.__scheduler = BackgroundScheduler()
+        local_tz = get_localzone()
+        self.__scheduler = BackgroundScheduler(timezone=local_tz)
+        logger.debug(f"调度器运行时区：{self.__scheduler.timezone}")
 
     def __del__(self):
         self.__scheduler.shutdown(wait=False)
@@ -39,28 +45,8 @@ class shellTaskUtils:
         间隔 -> 'interval'
 
         数据格式 :
-        [
-            {
-                name:名称,
-                exec_type:执行类型,
-                interval:间隔时间(秒),
-                that_time:指定时间(时间戳),
-                exec_count:执行次数(null 为 无限),
-                cycle:{
-                    time: 时间,
-                    week:[] ->      1: 'monday',
-                    },              2: 'tuesday',
-                command:执行命令,     3: 'wednesday',
-                                    4: 'thursday',
-                                    5: 'friday',
-                                    6: 'saturday',
-                                    7: 'sunday',
-            }
-        ]
 
-        """
-
-        task = {
+        task = {  # 一个任务对象
             "name": "task_name",  # 任务名
             "uuid": "uuid",  # 任务uuid
             "type": "task_type",  # 任务类型
@@ -98,7 +84,18 @@ class shellTaskUtils:
                 "timestamp": 10000  # 任务结束时时间搓
             }
         }
+        """
 
+
+        # 初始化任务数据保存路径
+        self.__data_path = os.path.join(self.__websocket.get_base_data_save_path(), "tasks")
+        if not os.path.exists(self.__data_path):
+            os.mkdir(self.__data_path)
+        # 初始化录制保存路径
+        self.__record_path = os.path.join(self.__data_path, "record")
+        if not os.path.exists(self.__record_path):
+            os.mkdir(self.__record_path)
+        # 初始化任务集
         for task in task_list:
             """
             uuid: str 任务唯一标识符
@@ -109,6 +106,7 @@ class shellTaskUtils:
             exec_cycle: dict 运行周期
             exec_count: 运行次数
             """
+            logger.info(f"初始化任务: {task.get('name')}")
             self.__handle_start_task(
                 uuid=task.get('uuid'),
                 exec_type=task.get('type'),
@@ -123,6 +121,7 @@ class shellTaskUtils:
     def add_task(self, task):
         """添加任务"""
         task_uuid = task.get('uuid')
+        logger.info(f"添加任务：{task_uuid}")
         if self.__scheduler.get_job(task_uuid):
             logger.warning(f"任务uuid: {task_uuid}已存在")
             return False
@@ -139,7 +138,8 @@ class shellTaskUtils:
 
     def remove_task(self, task_uuid):
         """使用UUID删除任务"""
-        print(self.__scheduler.get_job(task_uuid))
+        logger.info(f"删除任务：{task_uuid}")
+        # print(self.__scheduler.get_job(task_uuid))
         if not self.__scheduler.get_job(task_uuid):
             logger.warning(f"任务uuid: {task_uuid}不存在")
             return False
@@ -148,6 +148,7 @@ class shellTaskUtils:
     def reload_task(self, task):
         """重新载入一个任务"""
         task_uuid = task.get('uuid')
+        logger.info(f"重载任务：{task_uuid}")
         if not self.__scheduler.get_job(task_uuid):
             logger.warning(f"任务uuid: {task_uuid}不存在")
             return False
@@ -171,7 +172,12 @@ class shellTaskUtils:
             cwd = os.path.join(os.getcwd(), "shell_run")
         if not os.path.exists(cwd):
             os.mkdir(cwd)
-        logger.debug(f"run shell script")
+        # 初始化任务保存路径
+        save_path = os.path.join(self.__record_path, uuid)
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
+        logger.debug(f"run shell script: {uuid}")
+        script += "\nreturn 0" if sys.platform != 'win32' else "\nexit /b 0"
         # 执行多行 shell 脚本，设置 shell=True 并使用 bash 解释器执行
         self.__process_list[uuid] = subprocess.Popen(
             ["bash", "-c", script],
@@ -181,6 +187,7 @@ class shellTaskUtils:
         )
         process_mark_uuid = str(uuid1())
         self.__process_mark[uuid] = process_mark_uuid
+        self.__record_fd[uuid] = open(os.path.join(save_path, process_mark_uuid), "w+")
         self.__send_websocket_action('task:process_start', {
             'uuid': uuid,
             'mark': process_mark_uuid,
@@ -193,34 +200,47 @@ class shellTaskUtils:
                 args=()
             )
         # 如果线程未启动则启动线程
+        # print(self.__get_process_thread.is_alive())
         if not self.__get_process_thread.is_alive():
+            self.__get_process_thread = Thread(
+                target=self.__get_process_output,
+                args=()
+            )
             self.__get_process_thread.start()
 
     def __get_process_output(self):
         """获取所有进程输出"""
         while len(self.__process_list) > 0:
+            close_list = []
             for i in self.__process_list:
                 process = self.__process_list[i]
-                if process.poll():
-                    self.__send_websocket_action("task:process_stop", {
-                        'uuid': i,
-                        'mark': self.__process_mark[i],
-                        'code': process.returncode,
-                        'timestamp': time.time()
-                    })
-                    del self.__process_list[i]
-                    continue
-                line = self.__process_list[i].stdout.readline()
+                line = process.stdout.readline()
                 line = line.strip().decode('utf-8')
                 if line:
                     logger.debug(f'[uuid: {i}]Subprogram output: {line}')
+                    self.__record_fd[i].write(f"{line}\n")
                     self.__send_websocket_action("task:process_output", {
                         'uuid': i,
                         'mark': self.__process_mark[i],
                         'line': line,
                         'timestamp': time.time()
                     })
-            time.sleep(1)
+                if process.poll():
+                    logger.debug(f"[uuid: {i}]进程结束")
+                    self.__send_websocket_action("task:process_stop", {
+                        'uuid': i,
+                        'mark': self.__process_mark[i],
+                        'code': process.returncode,
+                        'timestamp': time.time()
+                    })
+                    self.__record_fd[i].write(f"[END {process.returncode}]")
+                    close_list.append(i)
+            for i in close_list:
+                logger.debug(f"delete process: {i}")
+                del self.__process_list[i]
+                self.__record_fd[i].close()
+
+            time.sleep(0.2)
 
     def __handle_start_task(self, uuid: str, exec_type: str, shell: str, cwd: str = None, exec_time: int = None,
                             exec_week: list[int] = None, exec_count: int = None) -> bool:
@@ -258,24 +278,9 @@ class shellTaskUtils:
                     logger.warning(f"任务uuid: {uuid}配置失败(缺少运行配置)")
                     return False
                 logger.debug(self.__handle_week(exec_week))
-                print(exec_time)
                 hours = exec_time // 3600
                 minutes = (exec_time % 3600) // 60
                 logger.debug(f"hour: {hours} minute: {minutes}")
-                print(uuid)
-                if exec_count:
-                    self.__scheduler.add_job(
-                        self.__run_shell,
-                        args=[shell, uuid, cwd],
-                        id=uuid,
-                        name=uuid,
-                        trigger='cron',
-                        day_of_week=self.__handle_week(exec_week),
-                        hour=hours,
-                        minute=minutes,
-                        max_instances=exec_count
-                    )
-                    return True
                 self.__scheduler.add_job(
                     self.__run_shell,
                     args=[shell, uuid, cwd],
@@ -289,18 +294,6 @@ class shellTaskUtils:
                 return True
             case "interval":
                 # 间隔任务
-                logger.debug(exec_time)
-                if exec_count:
-                    self.__scheduler.add_job(
-                        self.__run_shell,
-                        args=[shell, uuid, cwd],
-                        id=uuid,
-                        name=uuid,
-                        trigger='interval',
-                        seconds=exec_time,
-                        max_instances=exec_count
-                    )
-                    return True
                 self.__scheduler.add_job(
                     self.__run_shell,
                     args=[shell, uuid, cwd],

@@ -2,5 +2,6 @@ aiohttp
 psutil
 APScheduler
 tomli
+peewee
 paramiko; platform_system!="Windows"
 pywinpty; platform_system!="Linux"
