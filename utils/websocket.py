@@ -81,6 +81,7 @@ class WebSocket:
                         "terminal:input": self._terminal__input,
                         "terminal:resize": self._terminal__resize,
                         "process_list:start": self._process_list__start,
+                        "process_list:stop": self._process_list__stop,
                         "process_list:kill": self._process_list__kill,
                         "task:add": self._add_task,
                         "task:remove": self._remove_task,

@@ -14,6 +14,7 @@ import utils.websocket as websocket
 from utils.logger import logger
 from utils.model import Task
 
+
 class shellTaskUtils:
     __websocket: websocket
     __scheduler: BackgroundScheduler
@@ -87,7 +88,6 @@ class shellTaskUtils:
         }
         """
 
-
         # 初始化任务数据保存路径
         self.__data_path = os.path.join(self.__websocket.get_base_data_save_path(), "tasks")
         if not os.path.exists(self.__data_path):
@@ -122,7 +122,7 @@ class shellTaskUtils:
                 Task.create(
                     name=task.get('name'),
                     uuid=task_uuid,
-                    max_count=task.get('exec_count') if task.get('exec_count') !=0 else 0
+                    max_count=task.get('exec_count') if task.get('exec_count') != 0 else 0
                 )
         self.__scheduler.start()
 
@@ -198,34 +198,39 @@ class shellTaskUtils:
 
         logger.debug(f"run shell script: {uuid}")
         script += "\nreturn 0" if sys.platform != 'win32' else "\nexit /b 0"
-        # 执行多行 shell 脚本，设置 shell=True 并使用 bash 解释器执行
-        self.__process_list[uuid] = subprocess.Popen(
-            ["bash", "-c", script],
-            cwd=cwd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
+
         process_mark_uuid = str(uuid1())
-        self.__process_mark[uuid] = process_mark_uuid
-        self.__record_fd[uuid] = open(os.path.join(save_path, process_mark_uuid), "w+")
-        task_model.count += 1
-        task_model.save()
+
         self.__send_websocket_action('task:process_start', {
             'uuid': uuid,
             'mark': process_mark_uuid,
             'timestamp': time.time()
         })
+
+        # 执行多行 shell 脚本，设置 shell=True 并使用 bash 解释器执行
+        self.__process_list[uuid] = subprocess.Popen(
+            script,
+            shell=True,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        self.__process_mark[uuid] = process_mark_uuid
+        self.__record_fd[uuid] = open(os.path.join(save_path, process_mark_uuid), "w+")
+        task_model.count += 1
+        task_model.save()
         # 如果线程不存在则初始化线程
         if self.__get_process_thread is None:
             self.__get_process_thread = Thread(
                 target=self.__get_process_output,
                 args=()
             )
+            self.__get_process_thread.start()
 
         # 如果线程未启动则启动线程
         # print(self.__get_process_thread.is_alive())
-        if not self.__get_process_thread.is_alive():
-            self.__get_process_thread.start()
+        # if not self.__get_process_thread.is_alive():
+
 
     def __get_process_output(self):
         """获取所有进程输出"""
@@ -259,10 +264,8 @@ class shellTaskUtils:
                 logger.debug(f"delete process: {i}")
                 del self.__process_list[i]
                 self.__record_fd[i].close()
-
-            time.sleep(0.2)
         logger.debug("获取进程输出结束")
-        self.__get_process_thread=None
+        self.__get_process_thread = None
 
     def __handle_start_task(self, uuid: str, exec_type: str, shell: str, cwd: str = None, exec_time: int = None,
                             exec_week: list[int] = None, exec_count: int = None) -> bool:
@@ -352,12 +355,25 @@ class shellTaskUtils:
     def __send_websocket_action(self, action, payload: dict = None):
         if payload is None:
             payload = {}
-        def __send(data):
-            asyncio.run(self.__websocket.websocket_send_json(data))
-        Thread(target=__send, args=({
-                'action': action,
-                'data': payload
-            },)).start()
+
+        print({
+            'action': action,
+            'data': payload
+        })
+
+        asyncio.run(self.__websocket.websocket_send_json({
+            'action': action,
+            'data': payload
+        }))
+
+        # def __send(data):
+        #     asyncio.run(self.__websocket.websocket_send_json(data))
+        #     print(data)
+        #
+        # Thread(target=__send, args=({
+        #         'action': action,
+        #         'data': payload
+        #     },)).start()
 
     def __get_task(self, uuid):
         query = Task.select().where(Task.uuid == uuid)
