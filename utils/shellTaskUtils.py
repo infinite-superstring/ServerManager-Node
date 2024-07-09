@@ -1,3 +1,4 @@
+import locale
 import os.path
 import asyncio
 
@@ -196,7 +197,7 @@ class shellTaskUtils:
             self.remove_task(uuid)
             return
 
-        logger.debug(f"run shell script: {uuid}")
+        logger.debug(f"run shell script: {uuid} cwd: {cwd}")
         script += "\nreturn 0" if sys.platform != 'win32' else "\nexit /b 0"
 
         process_mark_uuid = str(uuid1())
@@ -216,7 +217,7 @@ class shellTaskUtils:
             stderr=subprocess.PIPE
         )
         self.__process_mark[uuid] = process_mark_uuid
-        self.__record_fd[uuid] = open(os.path.join(save_path, process_mark_uuid), "w+")
+        self.__record_fd[uuid] = open(os.path.join(save_path, process_mark_uuid), "w+", encoding='utf-8')
         task_model.count += 1
         task_model.save()
         # 如果线程不存在则初始化线程
@@ -240,7 +241,7 @@ class shellTaskUtils:
             for i in self.__process_list:
                 process = self.__process_list[i]
                 line = process.stdout.readline()
-                line = line.strip().decode('utf-8')
+                line = line.strip().decode(locale.getpreferredencoding())
                 if line:
                     logger.debug(f'[uuid: {i}]Subprogram output: {line}')
                     self.__record_fd[i].write(f"{line}\n")
@@ -250,8 +251,8 @@ class shellTaskUtils:
                         'line': line,
                         'timestamp': time.time()
                     })
-                if process.poll():
-                    logger.debug(f"[uuid: {i}]进程结束")
+                if process.poll() is not None:
+                    logger.debug(f"[uuid: {i}]进程结束(code:{process.poll()})")
                     self.__send_websocket_action("task:process_stop", {
                         'uuid': i,
                         'mark': self.__process_mark[i],
@@ -323,7 +324,6 @@ class shellTaskUtils:
                     self.__run_shell,
                     args=[shell, uuid, cwd],
                     id=uuid,
-                    name=uuid,
                     trigger='interval',
                     seconds=exec_time,
                 )

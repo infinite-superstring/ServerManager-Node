@@ -16,9 +16,10 @@
 #             continue
 #         temp += f"{week_mappings.get(week)}"
 #     return temp
-
+import locale
 import time
 
 if __name__ == '__main__':
     # print(__handle_week([]))
     print(time.time())
+    print(locale.getpreferredencoding())

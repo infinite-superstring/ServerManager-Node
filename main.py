@@ -1,4 +1,5 @@
 import asyncio
+import os.path
 
 import aiohttp
 
@@ -19,5 +20,7 @@ async def main():
 
 
 if __name__ == '__main__':
+    if not os.path.exists('data'):
+        os.mkdir('data')
     database.create_tables([Task])
     asyncio.run(main())
