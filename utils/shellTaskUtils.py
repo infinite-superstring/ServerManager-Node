@@ -1,6 +1,7 @@
 import locale
 import os.path
 import asyncio
+import tempfile
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from tzlocal import get_localzone
@@ -25,6 +26,7 @@ class shellTaskUtils:
     __data_path: str
     __record_path: str
     __record_fd: dict[str:any] = {}
+    __temp_filename: dict[str:str] = {}
 
     def __init__(self, ws: websocket):
         """
@@ -142,7 +144,6 @@ class shellTaskUtils:
             exec_week=task.get('week'),
             exec_count=task.get('exec_count')
         )
-        print(task.get('exec_count'))
         if not self.__task_exists(task_uuid):
             Task.create(
                 name=task.get('name'),
@@ -243,9 +244,66 @@ class shellTaskUtils:
             )
             self.__get_process_thread.start()
 
-        # 如果线程未启动则启动线程
-        # print(self.__get_process_thread.is_alive())
-        # if not self.__get_process_thread.is_alive():
+    @logger.catch
+    def __run_bat(self, script, uuid, cwd: str = None):
+        """运行批处理"""
+        if not cwd:
+            cwd = os.path.join(os.getcwd(), "bat_run")
+        if not os.path.exists(cwd):
+            os.mkdir(cwd)
+        # 初始化任务保存路径
+        save_path = os.path.join(self.__record_path, uuid)
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
+
+        task_model = self.__get_task(uuid)
+        if task_model.max_count and task_model.max_count != 0 and task_model.count >= task_model.max_count:
+            self.remove_task(uuid)
+            return
+        logger.debug(f"run bat: {uuid} cwd: {cwd}")
+        process_mark_uuid = str(uuid1())
+
+        self.__send_websocket_action('task:process_start', {
+            'uuid': uuid,
+            'mark': process_mark_uuid,
+            'timestamp': time.time()
+        })
+
+        # 创建临时批处理文件
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.bat') as temp_file:
+            temp_file.write(script.encode(locale.getpreferredencoding()))
+            temp_filename = temp_file.name
+        # 执行批处理文件并捕获标准输出和标准错误输出
+        self.__process_list[uuid] = subprocess.Popen(
+            temp_filename,
+            shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        self.__temp_filename[uuid] = temp_filename
+        self.__process_mark[uuid] = process_mark_uuid
+        self.__record_fd[uuid] = open(os.path.join(save_path, process_mark_uuid), "w+", encoding='utf-8')
+        record_info = (
+            f"[INFO]\n"
+            f"task uuid: {uuid}\n"
+            f"process uuid: {process_mark_uuid}\n"
+            f"start time: {time.time()}\n"
+            f"[INFO]\n\n"
+            f"[BAT]\n"
+            f"{script}\n"
+            f"[BAT]\n\n"
+            f"[OUTPUT]\n"
+        )
+        self.__record_fd[uuid].write(record_info)
+        task_model.count += 1
+        task_model.save()
+        # 如果线程不存在则初始化线程
+        if self.__get_process_thread is None:
+            self.__get_process_thread = Thread(
+                target=self.__get_process_output,
+                args=()
+            )
+            self.__get_process_thread.start()
 
     @logger.catch
     def __get_process_output(self):
@@ -279,13 +337,20 @@ class shellTaskUtils:
                         'timestamp': time.time()
                     })
                     end_info = (
-                        f"[OUTPUT]\n"
+                        f"[OUTPUT]\n\n"
                         f"[END]\n"
                         f"end time: {time.time()}\n"
                         f"return: {process.returncode}\n"
                     )
                     end_info += f"error: {stderr.decode()}\n" if stderr else ""
                     end_info += f"[END]"
+
+                    if sys.platform == 'win32':
+                        temp_filename = self.__temp_filename[i]
+                        # 删除临时批处理文件
+                        if os.path.exists(temp_filename):
+                            os.remove(temp_filename)
+
                     self.__record_fd[i].write(end_info)
                     close_list.append(i)
             for i in close_list:
@@ -314,11 +379,17 @@ class shellTaskUtils:
         if not shell:
             logger.warning(f"任务uuid: {uuid}配置失败(缺少任务载荷)")
             return False
+
+        if sys.platform != 'win32':
+            run = self.__run_shell
+        else:
+            run = self.__run_bat
+
         match exec_type:
             case "date-time":
                 # 指定时间任务
                 self.__scheduler.add_job(
-                    self.__run_shell,
+                    run,
                     args=[shell, uuid, cwd],
                     id=uuid,
                     name=uuid,
@@ -336,7 +407,7 @@ class shellTaskUtils:
                 minutes = (exec_time % 3600) // 60
                 logger.debug(f"hour: {hours} minute: {minutes}")
                 self.__scheduler.add_job(
-                    self.__run_shell,
+                    run,
                     args=[shell, uuid, cwd],
                     id=uuid,
                     name=uuid,
@@ -349,7 +420,7 @@ class shellTaskUtils:
             case "interval":
                 # 间隔任务
                 self.__scheduler.add_job(
-                    self.__run_shell,
+                    run,
                     args=[shell, uuid, cwd],
                     id=uuid,
                     trigger='interval',
@@ -413,6 +484,11 @@ class shellTaskUtils:
         for job in self.__scheduler.get_jobs():
             logger.debug(f"删除调度器任务实例: {job}")
             job.remove()
+        # 删除临时批处理文件
+        if sys.platform == 'win32':
+            for temp_filename in self.__temp_filename:
+                if os.path.exists(temp_filename):
+                    os.remove(temp_filename)
         if self.__scheduler.state != 0:
             self.__scheduler.shutdown(wait=False)
         # 停止正在运行的进程
