@@ -19,6 +19,8 @@ from utils.processUtils import kill_proc_tree
 get_process_list_flag: bool = False
 get_process_list_thread: Thread
 
+
+@logger.catch
 async def get_disk_list():
     disk_list = []
     for item in psutil.disk_partitions():
@@ -38,6 +40,8 @@ async def get_disk_list():
         })
     return disk_list
 
+
+@logger.catch
 async def update_node_info(ws: WebSocket):
     """更新节点信息"""
     node_info = {
@@ -57,9 +61,10 @@ async def update_node_info(ws: WebSocket):
     try:
         await ws.websocket_send_json({'action': 'node:refresh_info', 'data': node_info})
     except Exception as e:
-        logger.error(f"节点信息更新上传失败！\n{e}")
+        logger.error(f"节点信息更新上传失败！{e}")
 
 
+@logger.catch
 async def get_disk_io_counters(time: int = 1):
     """获取磁盘io计数器/秒"""
     # 获取初始时刻的IO计数器值
@@ -73,6 +78,7 @@ async def get_disk_io_counters(time: int = 1):
     return {"read_bytes": read_bytes, "write_bytes": write_bytes}
 
 
+@logger.catch
 async def get_network_io_counters(time: int = 1):
     """获取网络io计数器/秒"""
     # 获取初始时刻的IO计数器值
@@ -97,6 +103,7 @@ async def get_network_io_counters(time: int = 1):
     return temp
 
 
+@logger.catch
 async def update_node_usage(ws: WebSocket):
     """更新节点占用状态"""
     node_core_usage = psutil.cpu_percent(percpu=True)
@@ -135,6 +142,7 @@ async def update_node_usage(ws: WebSocket):
     await ws.websocket_send_json({'action': 'node:upload_running_data', 'data': node_usage})
 
 
+@logger.catch
 async def start_get_process_list(ws: WebSocket):
     global get_process_list_flag
     """获取节点进程列表"""
@@ -144,12 +152,16 @@ async def start_get_process_list(ws: WebSocket):
         get_process_list_thread.start()
         get_process_list_flag = True
 
+
+@logger.catch
 async def stop_get_process_list():
     global get_process_list_flag
     logger.debug("服务端停止获取进程列表")
     if get_process_list_flag:
         get_process_list_flag = False
 
+
+@logger.catch
 async def kill_process(pid, tree_mode):
     logger.warning("kill_process")
     if pid == os.getpid():
@@ -167,6 +179,8 @@ async def kill_process(pid, tree_mode):
     else:
         RuntimeError(f"Process {pid} does not exist")
 
+
+@logger.catch
 def get_process_list(ws: WebSocket):
     global get_process_list_flag
     logger.debug("获取进程列表进程已启动.....")

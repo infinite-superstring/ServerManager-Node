@@ -52,8 +52,6 @@ class tty_service:
 
     def __del__(self):
         self.close()
-        if self.__terminal is not None:
-            self.__terminal.client.close()
 
     def get_session_list(self):
         """获取会话列表"""
@@ -64,8 +62,9 @@ class tty_service:
         if session_id in self.__session:
             return self.__session[session_id]
         else:
-            raise RuntimeError("终端会话不存在")
+            logger.warning(f"[{session_id}]终端会话不存在")
 
+    @logger.catch
     def resize(self, session_id, cols, rows):
         if session_id in self.__session:
             if sys.platform != 'win32':
@@ -73,8 +72,9 @@ class tty_service:
             else:
                 self.__session[session_id].set_size(cols, rows)
         else:
-            raise RuntimeError("终端会话不存在")
+            logger.warning(f"[{session_id}]终端会话不存在")
 
+    @logger.catch
     def send_command(self, session_id, command):
         if session_id in self.__session:
             if sys.platform != 'win32':
@@ -82,8 +82,9 @@ class tty_service:
             else:
                 self.__session[session_id].write(command)
         else:
-            raise RuntimeError("终端会话不存在")
+            logger.warning(f"[{session_id}]终端会话不存在")
 
+    @logger.catch
     def terminal_output(self, session_id, ws: WebSocket):
         async def __send(ws, data):
             await ws.websocket_send_json({'action': 'terminal:output', 'data': {'uuid': session_id, "output": data}})
@@ -95,6 +96,7 @@ class tty_service:
         else:
             raise RuntimeError("终端会话不存在")
 
+    @logger.catch
     def __get_terminal_output(self, session_id, callback):
         if not os.path.exists("terminal_record"):
             os.mkdir("terminal_record")
@@ -117,16 +119,16 @@ class tty_service:
         fd.close()
         logger.debug(f'session {session_id} get output stop')
 
+    @logger.catch
     def close_session(self, session_id):
         print("关闭终端会话.....")
         """关闭终端会话"""
         if session_id in self.__session:
             del self.__session[session_id]
         else:
-            logger.warning('"终端会话关闭"')
-
+            logger.warning(f"[{session_id}]终端会话不存在")
+    @logger.catch
     def close(self):
         temp = list(self.__session.keys())
-        print(temp)
         for session_id in temp:
             self.close_session(session_id)

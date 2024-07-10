@@ -3,5 +3,6 @@ psutil
 APScheduler
 tomli
 peewee
+loguru
 paramiko; platform_system!="Windows"
 pywinpty; platform_system!="Linux"

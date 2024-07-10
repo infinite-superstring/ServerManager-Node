@@ -35,9 +35,7 @@ class shellTaskUtils:
         self.__scheduler = BackgroundScheduler(timezone=local_tz)
         logger.debug(f"调度器运行时区：{self.__scheduler.timezone}")
 
-    def __del__(self):
-        self.__scheduler.shutdown(wait=False)
-
+    @logger.catch
     def init_task_list(self, task_list):
         """
         初始化节点任务列表
@@ -127,6 +125,7 @@ class shellTaskUtils:
                 )
         self.__scheduler.start()
 
+    @logger.catch
     def add_task(self, task):
         """添加任务"""
         task_uuid = task.get('uuid')
@@ -152,6 +151,7 @@ class shellTaskUtils:
             )
         return True
 
+    @logger.catch
     def remove_task(self, task_uuid):
         """使用UUID删除任务"""
         logger.info(f"删除任务：{task_uuid}")
@@ -160,6 +160,7 @@ class shellTaskUtils:
             return False
         self.__scheduler.remove_job(task_uuid)
 
+    @logger.catch
     def reload_task(self, task):
         """重新载入一个任务"""
         task_uuid = task.get('uuid')
@@ -179,6 +180,7 @@ class shellTaskUtils:
         )
         return True
 
+    @logger.catch
     def __run_shell(self, script, uuid, cwd: str = None):
         """
         运行Shell脚本
@@ -198,7 +200,7 @@ class shellTaskUtils:
             return
 
         logger.debug(f"run shell script: {uuid} cwd: {cwd}")
-        script += "\nreturn 0" if sys.platform != 'win32' else "\nexit /b 0"
+        # script += "" if sys.platform != 'win32' else "\nexit /b 0"
 
         process_mark_uuid = str(uuid1())
 
@@ -213,6 +215,7 @@ class shellTaskUtils:
             script,
             shell=True,
             cwd=cwd,
+            executable='/bin/bash',
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
@@ -232,7 +235,7 @@ class shellTaskUtils:
         # print(self.__get_process_thread.is_alive())
         # if not self.__get_process_thread.is_alive():
 
-
+    @logger.catch
     def __get_process_output(self):
         """获取所有进程输出"""
         logger.debug("获取进程输出开始")
@@ -251,12 +254,16 @@ class shellTaskUtils:
                         'line': line,
                         'timestamp': time.time()
                     })
-                if process.poll() is not None:
+                if process.poll() is not None and not line:
+                    stdout, stderr = process.communicate()
+                    if stderr:
+                        logger.error(f"执行错误:{stderr.decode()}")
                     logger.debug(f"[uuid: {i}]进程结束(code:{process.poll()})")
                     self.__send_websocket_action("task:process_stop", {
                         'uuid': i,
                         'mark': self.__process_mark[i],
                         'code': process.returncode,
+                        'error': stderr.decode(),
                         'timestamp': time.time()
                     })
                     self.__record_fd[i].write(f"[END {process.returncode}]")
@@ -268,6 +275,7 @@ class shellTaskUtils:
         logger.debug("获取进程输出结束")
         self.__get_process_thread = None
 
+    @logger.catch
     def __handle_start_task(self, uuid: str, exec_type: str, shell: str, cwd: str = None, exec_time: int = None,
                             exec_week: list[int] = None, exec_count: int = None) -> bool:
         """
@@ -332,6 +340,7 @@ class shellTaskUtils:
                 logger.error(f"未知的任务类型: {exec_type}")
                 return False
 
+    @logger.catch
     def __handle_week(self, week_list: list[int]) -> str:
         """
         处理星期
@@ -352,19 +361,18 @@ class shellTaskUtils:
 
         return day_of_week
 
+    @logger.catch
     def __send_websocket_action(self, action, payload: dict = None):
         if payload is None:
             payload = {}
 
-        print({
-            'action': action,
-            'data': payload
-        })
-
-        asyncio.run(self.__websocket.websocket_send_json({
-            'action': action,
-            'data': payload
-        }))
+        try:
+            asyncio.run(self.__websocket.websocket_send_json({
+                'action': action,
+                'data': payload
+            }))
+        except Exception as err:
+            logger.error(f"任务信息返回失败！{err}")
 
         # def __send(data):
         #     asyncio.run(self.__websocket.websocket_send_json(data))
@@ -375,6 +383,7 @@ class shellTaskUtils:
         #         'data': payload
         #     },)).start()
 
+    @logger.catch
     def __get_task(self, uuid):
         query = Task.select().where(Task.uuid == uuid)
         if query.exists():
@@ -383,6 +392,20 @@ class shellTaskUtils:
         else:
             logger.warning(f'Task with uuid {uuid} does not exist.')
 
+    @logger.catch
     def __task_exists(self, uuid):
         """任务是否已存在于数据库中"""
         return Task.select().where(Task.uuid == uuid).exists()
+
+    def close(self):
+        """关闭工具实例"""
+        for job in self.__scheduler.get_jobs():
+            logger.debug(f"删除调度器任务实例: {job}")
+            job.remove()
+        self.__scheduler.shutdown(wait=False)
+        # 停止正在运行的进程
+        for proces in self.__process_list.values():
+            proces.kill()
+        # 关闭文件流
+        for fd in self.__record_fd.values():
+            fd.close()

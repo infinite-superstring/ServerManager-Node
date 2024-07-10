@@ -8,7 +8,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from utils.auth import authenticate
 from utils.logger import logger
-from utils.node import update_node_usage, update_node_info, get_process_list, start_get_process_list, \
+from utils.node import update_node_usage, update_node_info, start_get_process_list, \
     stop_get_process_list, kill_process
 from utils.tty import tty_service
 from utils.shellTaskUtils import shellTaskUtils
@@ -17,8 +17,7 @@ from utils.shellTaskUtils import shellTaskUtils
 class WebSocket:
     __session: aiohttp.ClientSession
     __ws: aiohttp.client_ws.ClientWebSocketResponse
-    __update_node_usage_scheduler: AsyncIOScheduler = None
-    __get_process_list_scheduler: AsyncIOScheduler = None
+    __scheduler: AsyncIOScheduler = None
     __node_config: dict
     __tty_service: tty_service = None
     __shell_task_service: shellTaskUtils = None
@@ -31,10 +30,6 @@ class WebSocket:
         if not os.path.exists(self.__data_path):
             os.mkdir(self.__data_path)
         self.__session = session
-        self.__update_node_usage_scheduler = AsyncIOScheduler()
-        self.__get_process_list_scheduler = AsyncIOScheduler()
-        self.__tty_service = tty_service()
-        self.__shell_task_service = shellTaskUtils(self)
 
     async def websocket_connect(self):
         from utils.config import config
@@ -49,9 +44,14 @@ class WebSocket:
             "node_token": self.__config()['server']['client_token'],
         }
         while True:
+            self.__tty_service = tty_service()
+            self.__shell_task_service = shellTaskUtils(self)
+            self.__scheduler = AsyncIOScheduler()
             try:
                 # 发送节点认证请求
                 self.__session = await authenticate(self.__session, auth_path, auth_data)
+                if not self.__session:
+                    continue
                 async with self.__session.ws_connect(ws_url, autoping=True) as ws:
                     self.__ws = ws
                     recv_task = asyncio.create_task(self.message_handler())
@@ -59,10 +59,12 @@ class WebSocket:
             except aiohttp.ClientError as err:
                 logger.error(f"WebSocket connection failed. Retrying...({err})")
                 await asyncio.sleep(5)
-            if self.__update_node_usage_scheduler and self.__update_node_usage_scheduler.state != 0:
-                self.__update_node_usage_scheduler.shutdown()
-                self.__update_node_usage_scheduler.shutdown()
-            self.__tty_service.close()
+            logger.warning("连接已断开")
+            if self.__scheduler and self.__scheduler.state != 0:
+                self.__scheduler.shutdown(wait=False)
+            self.__shell_task_service.close()
+            del self.__tty_service
+            del self.__shell_task_service
 
     async def message_handler(self):
         while not self.__ws.closed:
@@ -94,16 +96,16 @@ class WebSocket:
                 case web.WSMsgType.BINARY:
                     pass
                 case web.WSMsgType.CLOSE:
-                    self.__update_node_usage_scheduler.shutdown()
-                    self.__update_node_usage_scheduler.shutdown()
+                    self.__scheduler.shutdown()
+                    del self.__tty_service
+                    del self.__shell_task_service
                     logger.info("连接已断开")
             # await asyncio.sleep(0.2)
 
     async def _close(self, payload=None):
         """关闭节点端"""
         logger.info(f'Close......')
-        self.__update_node_usage_scheduler.shutdown()
-        self.__get_process_list_scheduler.shutdown()
+        self.__scheduler.shutdown()
         await stop_get_process_list()
         return exit(0)
 
@@ -117,6 +119,7 @@ class WebSocket:
         self.__shell_task_service.init_task_list(self.__node_config.get('task'))
         logger.info("node ready!")
 
+    @logger.catch
     async def _terminal__create_session(self, payload=None):
         """创建终端Session"""
         index = payload['index']
@@ -152,17 +155,20 @@ class WebSocket:
             }
         })
 
+    @logger.catch
     async def _terminal__close_session(self, payload=None):
         """关闭终端会话"""
         tty_session_uuid = payload['uuid']
         self.__tty_service.close_session(tty_session_uuid)
 
+    @logger.catch
     async def _terminal__input(self, payload=None):
         """向终端发送信息"""
         command = payload['command']
         tty_session_uuid = payload['uuid']
         self.__tty_service.send_command(tty_session_uuid, command)
 
+    @logger.catch
     async def _terminal__resize(self, payload=None):
         """调整节点终端大小"""
         cols = payload['cols']
@@ -170,14 +176,17 @@ class WebSocket:
         tty_session_uuid = payload['uuid']
         self.__tty_service.resize(tty_session_uuid, cols, rows)
 
+    @logger.catch
     async def _process_list__start(self, payload=None):
         """开始获取进程列表"""
         await start_get_process_list(self)
 
+    @logger.catch
     async def _process_list__stop(self, payload=None):
         """停止获取节点列表"""
         await stop_get_process_list()
 
+    @logger.catch
     async def _process_list__kill(self, payload=None):
         """杀死一个进程"""
         pid = payload['pid']
@@ -185,42 +194,47 @@ class WebSocket:
         if pid:
             await kill_process(pid, tree_mode)
 
+    @logger.catch
     async def _start_node_usage_upload_task(self):
         """启动调度器：上传节点状态"""
         # 调度方法为 update_node_usage，触发器选择 interval(间隔性)，间隔时长为 2 秒
-        self.__update_node_usage_scheduler.add_job(
+        self.__scheduler.add_job(
             update_node_usage,
             'interval',
             seconds=self.__node_config['upload_data_interval'],
             args=[self]
         )
         # 启动调度任务
-        self.__update_node_usage_scheduler.start()
+        self.__scheduler.start()
 
+    @logger.catch
     async def _add_task(self, data: dict):
         """添加任务"""
         self.__shell_task_service.add_task(data)
 
+    @logger.catch
     async def _remove_task(self, data):
         """删除一个任务"""
         self.__shell_task_service.remove_task(data)
 
+    @logger.catch
     async def _reload_task(self, data):
         """重载一个任务"""
         self.__shell_task_service.reload_task(data)
 
+    @logger.catch
     async def websocket_send_json(self, data: dict):
         try:
             # logger.debug(f"send: {data}")
             await self.__ws.send_str(json.dumps(data))
         except ConnectionResetError as e:
             logger.error(e)
-            self.__update_node_usage_scheduler.shutdown(wait=False)
-            self.__update_node_usage_scheduler.shutdown(wait=False)
+            self.__scheduler.shutdown(wait=False)
             await stop_get_process_list()
             await self.__ws.close()
             logger.info('Stop WebSocket...')
 
+    @logger.catch
     def get_base_data_save_path(self):
         """获取基本数据保存路径"""
         return self.__data_path

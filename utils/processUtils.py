@@ -2,6 +2,10 @@ import os
 import signal
 import psutil
 
+from utils.logger import logger
+
+
+@logger.catch
 def kill_proc_tree(pid, sig=signal.SIGTERM, include_parent=True, timeout=None, on_terminate=None):
     """Kill a process tree (including grandchildren) with signal
     "sig" and return a (gone, still_alive) tuple.
