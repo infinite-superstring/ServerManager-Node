@@ -22,7 +22,7 @@ class tty_service:
     __thread: dict[str: Thread] = {}
 
     def create_session(self, host=None, port=None, username=None, password=None):
-        print("初始化终端")
+        logger.debug("初始化终端")
         """创建终端会话"""
         child = None
         login_status = False
@@ -90,7 +90,8 @@ class tty_service:
             await ws.websocket_send_json({'action': 'terminal:output', 'data': {'uuid': session_id, "output": data}})
 
         if session_id in self.__session:
-            self.__thread[session_id] = Thread(target=self.__get_terminal_output,
+            self.__thread[session_id] = Thread(
+                target=self.__get_terminal_output,
                                                args=(session_id, lambda data: asyncio.run(__send(ws, data))))
             self.__thread[session_id].start()
         else:
@@ -98,9 +99,10 @@ class tty_service:
 
     @logger.catch
     def __get_terminal_output(self, session_id, callback):
-        if not os.path.exists("terminal_record"):
-            os.mkdir("terminal_record")
-        fd = open(str(os.path.join(os.getcwd(), f'terminal_record/{session_id}.txt')), 'w+')
+        base_path = os.path.join(os.getcwd(), "data", "terminal_record")
+        if not os.path.exists(base_path):
+            os.mkdir(base_path)
+        fd = open(str(os.path.join(os.getcwd(), os.path.join(base_path, session_id))), 'w+')
         while self.__session.get(session_id) is not None:
             output = ""
             if sys.platform != 'win32':
@@ -121,7 +123,7 @@ class tty_service:
 
     @logger.catch
     def close_session(self, session_id):
-        print("关闭终端会话.....")
+        logger.debug("关闭终端会话.....")
         """关闭终端会话"""
         if session_id in self.__session:
             del self.__session[session_id]

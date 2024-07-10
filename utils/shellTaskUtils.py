@@ -221,6 +221,18 @@ class shellTaskUtils:
         )
         self.__process_mark[uuid] = process_mark_uuid
         self.__record_fd[uuid] = open(os.path.join(save_path, process_mark_uuid), "w+", encoding='utf-8')
+        record_info = (
+            f"[INFO]\n"
+            f"task uuid: {uuid}\n"
+            f"process uuid: {process_mark_uuid}\n"
+            f"start time: {time.time()}\n"
+            f"[INFO]\n"
+            f"[SHELL]\n"
+            f"{script}\n"
+            f"[SHELL]\n"
+            f"[OUTPUT]\n"
+        )
+        self.__record_fd[uuid].write(record_info)
         task_model.count += 1
         task_model.save()
         # 如果线程不存在则初始化线程
@@ -266,7 +278,15 @@ class shellTaskUtils:
                         'error': stderr.decode(),
                         'timestamp': time.time()
                     })
-                    self.__record_fd[i].write(f"[END {process.returncode}]")
+                    end_info = (
+                        f"[OUTPUT]\n"
+                        f"[END]\n"
+                        f"end time: {time.time()}\n"
+                        f"return: {process.returncode}\n"
+                    )
+                    end_info += f"error: {stderr.decode()}\n" if stderr else ""
+                    end_info += f"[END]"
+                    self.__record_fd[i].write(end_info)
                     close_list.append(i)
             for i in close_list:
                 logger.debug(f"delete process: {i}")
@@ -373,15 +393,6 @@ class shellTaskUtils:
             }))
         except Exception as err:
             logger.error(f"任务信息返回失败！{err}")
-
-        # def __send(data):
-        #     asyncio.run(self.__websocket.websocket_send_json(data))
-        #     print(data)
-        #
-        # Thread(target=__send, args=({
-        #         'action': action,
-        #         'data': payload
-        #     },)).start()
 
     @logger.catch
     def __get_task(self, uuid):

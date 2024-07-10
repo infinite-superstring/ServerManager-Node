@@ -53,6 +53,7 @@ class WebSocket:
                 self.__shell_task_service = shellTaskUtils(self)
                 self.__scheduler = AsyncIOScheduler()
                 async with self.__session.ws_connect(ws_url, autoping=True) as ws:
+                    logger.success("WebSocket已连接")
                     self.__ws = ws
                     recv_task = asyncio.create_task(self.message_handler())
                     await recv_task
