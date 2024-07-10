@@ -154,8 +154,8 @@ async def update_node_usage(ws: WebSocket):
 async def start_get_process_list(ws: WebSocket):
     global get_process_list_flag
     """获取节点进程列表"""
-    logger.debug('服务端发起获取进程列表')
     if not get_process_list_flag:
+        logger.debug('服务端发起获取进程列表')
         get_process_list_thread = Thread(target=get_process_list, args=(ws,))
         get_process_list_thread.start()
         get_process_list_flag = True
@@ -164,9 +164,9 @@ async def start_get_process_list(ws: WebSocket):
 @logger.catch
 async def stop_get_process_list():
     global get_process_list_flag
-    logger.debug("服务端停止获取进程列表")
     if get_process_list_flag:
         get_process_list_flag = False
+        logger.debug("服务端停止获取进程列表")
 
 
 @logger.catch
