@@ -60,12 +60,15 @@ class WebSocket:
             except aiohttp.ClientError as err:
                 logger.error(f"WebSocket connection failed. Retrying...({err})")
                 await asyncio.sleep(5)
-            logger.warning("连接已断开")
+            await stop_get_process_list()
             if self.__scheduler and self.__scheduler.state != 0:
                 self.__scheduler.shutdown(wait=False)
-            self.__shell_task_service.close()
-            del self.__tty_service
-            del self.__shell_task_service
+            if self.__shell_task_service:
+                self.__shell_task_service.close()
+                del self.__shell_task_service
+            if self.__tty_service:
+                del self.__tty_service
+
 
     async def message_handler(self):
         while not self.__ws.closed:
