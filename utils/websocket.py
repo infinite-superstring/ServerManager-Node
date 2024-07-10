@@ -44,14 +44,14 @@ class WebSocket:
             "node_token": self.__config()['server']['client_token'],
         }
         while True:
-            self.__tty_service = tty_service()
-            self.__shell_task_service = shellTaskUtils(self)
-            self.__scheduler = AsyncIOScheduler()
             try:
                 # 发送节点认证请求
-                self.__session = await authenticate(self.__session, auth_path, auth_data)
-                if not self.__session:
+                self.__session, auth_status = await authenticate(self.__session, auth_path, auth_data)
+                if not auth_status:
                     continue
+                self.__tty_service = tty_service()
+                self.__shell_task_service = shellTaskUtils(self)
+                self.__scheduler = AsyncIOScheduler()
                 async with self.__session.ws_connect(ws_url, autoping=True) as ws:
                     self.__ws = ws
                     recv_task = asyncio.create_task(self.message_handler())

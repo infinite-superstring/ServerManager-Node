@@ -402,7 +402,8 @@ class shellTaskUtils:
         for job in self.__scheduler.get_jobs():
             logger.debug(f"删除调度器任务实例: {job}")
             job.remove()
-        self.__scheduler.shutdown(wait=False)
+        if self.__scheduler.state != 0:
+            self.__scheduler.shutdown(wait=False)
         # 停止正在运行的进程
         for proces in self.__process_list.values():
             proces.kill()

@@ -70,7 +70,10 @@ async def get_disk_io_counters(time: int = 1):
     # 获取初始时刻的IO计数器值
     io_counters_start = psutil.disk_io_counters()
     # 等待一段时间
-    await asyncio.sleep(time)
+    try:
+        await asyncio.sleep(time)
+    except asyncio.exceptions.CancelledError:
+        pass
     # 获取结束时刻的IO计数器值
     io_counters_end = psutil.disk_io_counters()
     read_bytes = io_counters_end.read_bytes - io_counters_start.read_bytes
@@ -85,7 +88,10 @@ async def get_network_io_counters(time: int = 1):
     network_counters_start = psutil.net_io_counters(pernic=True)
     all_network_counters_start = psutil.net_io_counters()
     # 等待一段时间
-    await asyncio.sleep(time)
+    try:
+        await asyncio.sleep(time)
+    except asyncio.exceptions.CancelledError:
+        pass
     # 获取结束时刻的IO计数器值
     network_counters_end = psutil.net_io_counters(pernic=True)
     all_network_counters_end = psutil.net_io_counters()
@@ -113,6 +119,8 @@ async def update_node_usage(ws: WebSocket):
     node_swap = psutil.swap_memory()
     node_disk_io = await get_disk_io_counters()
     node_network_io = await get_network_io_counters()
+    if not node_disk_io or not node_network_io:
+        return
     node_usage = {
         "loadavg": node_loadavg,
         "cpu": {
