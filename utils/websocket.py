@@ -45,7 +45,6 @@ class WebSocket:
         ws_url = ("wws://" if SSL else "ws://" + host + ":" + str(port) + "/ws/node/node_client")
         auth_path = f'{"https" if SSL else "http"}://{host}:{port}/api/auth/nodeAuth'
         auth_data = {
-            "server_token": self.__config()['server']['server_token'],
             "node_name": self.__config()['server']['client_name'],
             "node_token": self.__config()['server']['client_token'],
         }
