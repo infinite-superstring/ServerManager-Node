@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os.path
+import time
 
 import aiohttp
 from aiohttp import web, ClientWebSocketResponse
@@ -48,6 +49,7 @@ class WebSocket:
                 # 发送节点认证请求
                 self.__session, auth_status = await authenticate(self.__session, auth_path, auth_data)
                 if not auth_status:
+                    time.sleep(5)
                     continue
                 self.__tty_service = tty_service()
                 self.__shell_task_service = shellTaskUtils(self)
