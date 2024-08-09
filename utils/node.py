@@ -156,7 +156,6 @@ async def start_get_process_list(ws: WebSocket):
     """获取节点进程列表"""
     if not get_process_list_flag:
         logger.debug('服务端发起获取进程列表')
-        get_process_list_flag = True
         get_process_list_thread = Thread(target=get_process_list, args=(ws,))
         get_process_list_thread.start()
 
@@ -191,6 +190,7 @@ async def kill_process(pid, tree_mode):
 @logger.catch
 def get_process_list(ws: WebSocket):
     global get_process_list_flag
+    get_process_list_flag = True
     logger.debug("获取进程列表进程已启动.....")
     while get_process_list_flag:
         try:

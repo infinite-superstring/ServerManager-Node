@@ -1,0 +1,20 @@
+FROM docker-hub.pigeon-server.cn/library/python:slim-bullseye
+LABEL authors="fsj"
+
+# 设置工作目录
+WORKDIR /build
+
+# 复制当前目录内容到工作目录
+COPY . .
+
+# 安装PyInstaller
+RUN pip install pyinstaller
+
+# 使用PyInstaller将Python脚本打包成可执行文件
+RUN pyinstaller --onefile main.py
+
+# 将生成的可执行文件复制到 /output 目录
+RUN mkdir /output && cp /app/dist/main /output
+
+# 定义容器启动时执行的命令
+CMD ["echo", "Build complete"]

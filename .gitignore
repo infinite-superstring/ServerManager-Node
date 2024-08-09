@@ -11,3 +11,6 @@
 /dumpdata.json
 /config.toml
 /data/*
+/main.spec
+/build
+/dist

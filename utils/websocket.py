@@ -12,6 +12,7 @@ from utils.node import update_node_usage, update_node_info, start_get_process_li
     stop_get_process_list, kill_process
 from utils.tty import tty_service
 from utils.shellTaskUtils import shellTaskUtils
+from utils.executeUtils import executeUtils
 
 
 class WebSocket:
@@ -21,6 +22,7 @@ class WebSocket:
     __node_config: dict
     __tty_service: tty_service = None
     __shell_task_service: shellTaskUtils = None
+    __shell_execute_service: executeUtils = None
     __config = None
     __data_path: str
 
@@ -51,6 +53,7 @@ class WebSocket:
                     continue
                 self.__tty_service = tty_service()
                 self.__shell_task_service = shellTaskUtils(self)
+                self.__shell_execute_service = executeUtils(self)
                 self.__scheduler = AsyncIOScheduler()
                 async with self.__session.ws_connect(ws_url, autoping=True) as ws:
                     logger.success("WebSocket已连接")
@@ -59,6 +62,7 @@ class WebSocket:
                     await recv_task
             except aiohttp.ClientError as err:
                 logger.error(f"WebSocket connection failed. Retrying...({err})")
+            finally:
                 await asyncio.sleep(5)
             await stop_get_process_list()
             if self.__scheduler and self.__scheduler.state != 0:
@@ -91,6 +95,7 @@ class WebSocket:
                         "task:add": self._add_task,
                         "task:remove": self._remove_task,
                         "task:reload": self._reload_task,
+                        "run_shell": self._execute_shell
                     }
 
                     if action not in actions.keys():
@@ -225,6 +230,15 @@ class WebSocket:
     async def _reload_task(self, data):
         """重载一个任务"""
         self.__shell_task_service.reload_task(data)
+
+    @logger.catch
+    async def _execute_shell(self, data):
+        """执行一个shell"""
+        self.__shell_execute_service.executeShellCommand(
+            data.get('task_uuid'),
+            data.get('base_path'),
+            data.get("command"),
+        )
 
     @logger.catch
     async def websocket_send_json(self, data: dict):

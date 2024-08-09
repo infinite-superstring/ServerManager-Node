@@ -12,3 +12,11 @@
     
     python main.py
 ```
+
+
+## 编译到可执行文件
+**X86**
+```shell
+docker build -t  .
+docker run --rm -v $(pwd)/output:/output my_python_app
+```
