@@ -239,7 +239,7 @@ class WebSocket:
         self.__shell_execute_service.executeShellCommand(
             data.get('task_uuid'),
             data.get('base_path'),
-            data.get("command"),
+            data.get("shell"),
         )
 
     @logger.catch
