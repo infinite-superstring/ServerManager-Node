@@ -97,7 +97,7 @@ class WebSocket:
                         "task:add": self._add_task,
                         "task:remove": self._remove_task,
                         "task:reload": self._reload_task,
-                        "run_shell": self._execute_shell
+                        "execute:run_shell": self._execute_shell
                     }
 
                     if action not in actions.keys():
@@ -239,7 +239,7 @@ class WebSocket:
         self.__shell_execute_service.executeShellCommand(
             data.get('task_uuid'),
             data.get('base_path'),
-            data.get("command"),
+            data.get("shell"),
         )
 
     @logger.catch

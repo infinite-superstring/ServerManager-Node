@@ -25,6 +25,10 @@ class executeUtils:
     def __init__(self, ws):
         self.__websocket = ws
         self.__scheduler = BackgroundScheduler()
+        # 初始化执行数据保存路径
+        self.__record_path = os.path.join(self.__websocket.get_base_data_save_path(), "shell_execute")
+        if not os.path.exists(self.__record_path):
+            os.mkdir(self.__record_path)
 
     def executeShellCommand(self, execute_uuid, execute_path, shell_command):
         """
@@ -58,7 +62,7 @@ class executeUtils:
 
         logger.debug(f"run shell script: {uuid} cwd: {cwd}")
 
-        self.__send_websocket_action('run_shell:start', {
+        self.__send_websocket_action('execute:start', {
             'uuid': uuid,
             'timestamp': time.time()
         })
@@ -107,7 +111,7 @@ class executeUtils:
 
         logger.debug(f"run bat: {uuid} cwd: {cwd}")
 
-        self.__send_websocket_action('run_shell:start', {
+        self.__send_websocket_action('execute:start', {
             'uuid': uuid,
             'timestamp': time.time()
         })
@@ -158,7 +162,7 @@ class executeUtils:
                 if line:
                     logger.debug(f'[uuid: {i}]Subprogram output: {line}')
                     self.__record_fd[i].write(f"{line}\n")
-                    self.__send_websocket_action("run_shell:output", {
+                    self.__send_websocket_action("execute:output", {
                         'uuid': i,
                         'line': line,
                         'timestamp': time.time()
@@ -168,7 +172,7 @@ class executeUtils:
                     if stderr:
                         logger.error(f"执行错误:{stderr.decode()}")
                     logger.debug(f"[uuid: {i}]进程结束(code:{process.poll()})")
-                    self.__send_websocket_action("run_shell:stop", {
+                    self.__send_websocket_action("execute:stop", {
                         'uuid': i,
                         'code': process.returncode,
                         'error': stderr.decode(),
@@ -202,13 +206,14 @@ class executeUtils:
     def __send_websocket_action(self, action, payload: dict = None):
         if payload is None:
             payload = {}
+        def _send(action, payload):
+            try:
+                asyncio.run(self.__websocket.websocket_send_json({
+                    'action': action,
+                    'data': payload
+                }))
+            except Exception as err:
+                logger.error(f"任务信息返回失败！{err}")
 
-        try:
-            asyncio.run(self.__websocket.websocket_send_json({
-                'action': action,
-                'data': payload
-            }))
-        except Exception as err:
-            logger.error(f"任务信息返回失败！{err}")
-
+        Thread(target=_send, args=(action, payload, )).start()
 
