@@ -158,7 +158,7 @@ class executeUtils:
             for i in self.__process_list:
                 process = self.__process_list[i]
                 line = process.stdout.readline()
-                line = line.strip().decode(locale.getpreferredencoding())
+                line = line.strip().decode(locale.getpreferredencoding(), errors="ignore")
                 if line:
                     logger.debug(f'[uuid: {i}]Subprogram output: {line}')
                     self.__record_fd[i].write(f"{line}\n")
