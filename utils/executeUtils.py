@@ -6,6 +6,7 @@ import sys
 import tempfile
 import time
 from threading import Thread
+from queue import Queue
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from utils.logger import logger
@@ -14,9 +15,11 @@ import utils.websocket as websocket
 
 class executeUtils:
     __websocket: websocket
+    __websocket_message_queue: Queue
+    __handle_websocket_thread: Thread | None = None
     __scheduler: BackgroundScheduler
     __process_list: dict[str: subprocess.Popen] = {}
-    __get_process_thread: Thread = None
+    __get_process_thread: Thread | None = None
     __data_path: str
     __record_path: str
     __record_fd: dict[str:any] = {}
@@ -25,6 +28,7 @@ class executeUtils:
     def __init__(self, ws):
         self.__websocket = ws
         self.__scheduler = BackgroundScheduler()
+        self.__websocket_message_queue = Queue()
         # 初始化执行数据保存路径
         self.__record_path = os.path.join(self.__websocket.get_base_data_save_path(), "shell_execute")
         if not os.path.exists(self.__record_path):
@@ -206,14 +210,22 @@ class executeUtils:
     def __send_websocket_action(self, action, payload: dict = None):
         if payload is None:
             payload = {}
-        def _send(action, payload):
+
+        self.__websocket_message_queue.put({'action': action, 'data': payload})
+        if self.__handle_websocket_thread is None:
+            self.__get_process_thread = Thread(
+                target=self.__handle_websocket_queue,
+                args=()
+            )
+            self.__get_process_thread.start()
+
+    def __handle_websocket_queue(self):
+        while True:
+            task = self.__websocket_message_queue.get()
+            if not task:
+                break
             try:
-                asyncio.run(self.__websocket.websocket_send_json({
-                    'action': action,
-                    'data': payload
-                }))
+                asyncio.run(self.__websocket.websocket_send_json(task))
             except Exception as err:
-                logger.error(f"任务信息返回失败！{err}")
-
-        Thread(target=_send, args=(action, payload, )).start()
-
+                logger.error(f"Send WebSocket Message Error: {err}")
+        self.__handle_websocket_queue = None
