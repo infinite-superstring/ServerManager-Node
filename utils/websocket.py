@@ -8,6 +8,7 @@ from aiohttp import web, ClientWebSocketResponse
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from utils.auth import authenticate
+from utils.downloadFileUtil import DownloadFileUtil
 from utils.logger import logger
 from utils.node import update_node_usage, update_node_info, start_get_process_list, \
     stop_get_process_list, kill_process
@@ -24,6 +25,7 @@ class WebSocket:
     __tty_service: tty_service = None
     __shell_task_service: shellTaskUtils = None
     __shell_execute_service: executeUtils = None
+    __download_file_service: DownloadFileUtil = None
     __config = None
     __data_path: str
 
@@ -41,11 +43,13 @@ class WebSocket:
         host = self.__config().get('server').get('server_host')
         port = self.__config().get('server').get('server_port')
         ws_url = ("wws://" if SSL else "ws://" + host + ":" + str(port) + "/ws/node/node_client")
+        download_file_url = ("https://" if SSL else "http://" + host + ":" + str(port) + "/node/file_distribution/download")
         auth_path = f'{"https" if SSL else "http"}://{host}:{port}/api/auth/nodeAuth'
         auth_data = {
             "node_name": self.__config()['server']['client_name'],
             "node_token": self.__config()['server']['client_token'],
         }
+
         while True:
             try:
                 # 发送节点认证请求
@@ -56,8 +60,14 @@ class WebSocket:
                 self.__tty_service = tty_service()
                 self.__shell_task_service = shellTaskUtils(self)
                 self.__shell_execute_service = executeUtils(self)
+                self.__download_file_service = DownloadFileUtil(self, self.__session, download_file_url)
                 self.__scheduler = AsyncIOScheduler()
                 async with self.__session.ws_connect(ws_url, autoping=True) as ws:
+                    logger.debug(self.__session)
+                    await self.__download_file_service.download_file('66d44081-9555-43e2-ad64-1f4d6ec40205', {
+                        'task': '66d44081-9555-43e2-ad64-1f4d6ec40205',
+                        'file': '7f2b01fe303f542442a49d9e8ae549723a2c516d32ac383c706a245f2b02b90f.file'
+                    }, './')
                     logger.success("WebSocket已连接")
                     self.__ws = ws
                     recv_task = asyncio.create_task(self.message_handler())
