@@ -213,7 +213,7 @@ class executeUtils:
 
         self.__websocket_message_queue.put({'action': action, 'data': payload})
         if self.__handle_websocket_thread is None:
-            self.__get_process_thread = Thread(
+            self.__handle_websocket_thread = Thread(
                 target=self.__handle_websocket_queue,
                 args=()
             )
@@ -228,4 +228,4 @@ class executeUtils:
                 asyncio.run(self.__websocket.websocket_send_json(task))
             except Exception as err:
                 logger.error(f"Send WebSocket Message Error: {err}")
-        self.__handle_websocket_queue = None
+        self.__handle_websocket_thread = None
