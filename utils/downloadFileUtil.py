@@ -52,19 +52,25 @@ class DownloadFileUtil:
         """
         self.__websocket = ws
         self.__session = client_session
-        logger.debug(self.__session)
         self.__url = url
         self.__websocket_message_queue = Queue()
         self.__download_queue = Queue()
         self.__max_download_thread = max_download_threads
         self.__loop = asyncio.get_event_loop()  # 获取当前事件循环
 
+    def __del__(self):
+        self.__download_queue.queue.clear()
+        self.__websocket_message_queue.queue.clear()
+        try:
+            del self.__handle_download_start_thread
+            del self.__handle_websocket_thread
+        except AttributeError:
+            pass
+
     def __get_file_name(self, response):
         # 提取文件名
         disposition = response.headers.get('Content-Disposition', '')
-        logger.debug(disposition)
         filename_match = re.findall('filename=(.*)', disposition)
-        logger.debug(filename_match)
         filename = filename_match[0]
 
         # 处理文件名的 URL 解码

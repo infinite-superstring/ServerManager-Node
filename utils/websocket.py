@@ -79,6 +79,8 @@ class WebSocket:
                 del self.__shell_task_service
             if self.__tty_service:
                 del self.__tty_service
+            if self.__download_file_service:
+                del self.__download_file_service
 
 
     async def message_handler(self):
