@@ -63,11 +63,6 @@ class WebSocket:
                 self.__download_file_service = DownloadFileUtil(self, self.__session, download_file_url)
                 self.__scheduler = AsyncIOScheduler()
                 async with self.__session.ws_connect(ws_url, autoping=True) as ws:
-                    logger.debug(self.__session)
-                    await self.__download_file_service.download_file('66d44081-9555-43e2-ad64-1f4d6ec40205', {
-                        'task': '66d44081-9555-43e2-ad64-1f4d6ec40205',
-                        'file': '7f2b01fe303f542442a49d9e8ae549723a2c516d32ac383c706a245f2b02b90f.file'
-                    }, './')
                     logger.success("WebSocket已连接")
                     self.__ws = ws
                     recv_task = asyncio.create_task(self.message_handler())
@@ -107,13 +102,18 @@ class WebSocket:
                         "task:add": self._add_task,
                         "task:remove": self._remove_task,
                         "task:reload": self._reload_task,
-                        "execute:run_shell": self._execute_shell
+                        "execute:run_shell": self._execute_shell,
+                        "download_file:add_tasks": self._download_files
                     }
 
                     if action not in actions.keys():
                         logger.error(f"Undefined action: {action}")
                         return
-                    await actions[action](data.get('data'))
+                    try:
+                        await actions[action](data.get('data'))
+                    except Exception as e:
+                        logger.error(f"Action {action} Execute Error: {e}")
+                        return
                 case web.WSMsgType.BINARY:
                     pass
                 case web.WSMsgType.CLOSE:
@@ -251,6 +251,20 @@ class WebSocket:
             data.get('base_path'),
             data.get("shell"),
         )
+
+    @logger.catch
+    async def _download_files(self, data):
+        """下载文件"""
+        task_id = data.get('task')
+        save_path = data.get('save_path')
+        for file in data.get('files'):
+            if not task_id or not file:
+                logger.warning("参数不完整")
+                return
+            save_path = save_path if save_path else os.path.join(os.getcwd(), 'data/download')
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+            await self.__download_file_service.download_file(task_id, file, save_path, True, file)
 
     @logger.catch
     async def websocket_send_json(self, data: dict):

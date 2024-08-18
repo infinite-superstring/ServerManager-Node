@@ -19,14 +19,14 @@ class DownloadTaskConfig:
     下载任务配置
     """
     task_id: str
-    params: dict
+    file_id: dict
     save_path: str
     check_hash: bool
     file_hash: str
 
-    def __init__(self, task_id: str, params: dict, save_path: str, check_hash: bool, file_hash: str):
+    def __init__(self, task_id: str, file_id: str, save_path: str, check_hash: bool, file_hash: str):
         self.task_id = task_id
-        self.params = params
+        self.file_id = file_id
         self.save_path = save_path
         self.check_hash = check_hash
         self.file_hash = file_hash
@@ -71,17 +71,17 @@ class DownloadFileUtil:
         filename = unquote(filename)
         return filename
 
-    async def download_file(self, task_id: str, params: dict, save_path: str, check_hash: bool = False,
+    async def download_file(self, task_id: str, file_id: str, save_path: str, check_hash: bool = False,
                             file_hash: str = None):
         """
         下载文件
         :param task_id: 任务标识符
-        :param params: GET请求参数
+        :param file_id: 文件id
         :param save_path: 保存路径
         :param check_hash: 校验文件哈希
         :param file_hash: 目标文件哈希
         """
-        self.__download_queue.put(DownloadTaskConfig(task_id, params, save_path, check_hash, file_hash))
+        self.__download_queue.put(DownloadTaskConfig(task_id, file_id, save_path, check_hash, file_hash))
         if self.__handle_download_start_thread is None:
             logger.debug("创建处理任务进程")
             self.__handle_download_start_thread = Thread(
@@ -96,15 +96,18 @@ class DownloadFileUtil:
         :param download_task:
         :return:
         """
-        logger.debug(download_task)
         if not os.path.exists(download_task.save_path):
             os.makedirs(download_task.save_path)
         try:
-            async with self.__session.get(self.__url, params=download_task.params) as response:
+            async with self.__session.get(self.__url, params={
+                'task': download_task.task_id,
+                'file': download_task.file_id,
+            }) as response:
                 if response.status != 200:
                     self.__download_threads -= 1
                     return self.__send_websocket_action('file_download:failure', {
                         'task': download_task.task_id,
+                        'file': download_task.file_id,
                         'error_type': "HTTP Status Code不正确",
                         'error_content': f"Status Code: {response.status}"
                     })
@@ -114,6 +117,7 @@ class DownloadFileUtil:
                     self.__download_threads -= 1
                     return self.__send_websocket_action('file_download:failure', {
                         'task': download_task.task_id,
+                        'file': download_task.file_id,
                         'error_type': "返回数据无效/无权限",
                         'error_content': str(response.text())
                     })
@@ -130,11 +134,11 @@ class DownloadFileUtil:
                         file.write(chunk)
                 sha256 = sha256.hexdigest()
                 # 校验哈希
-                if download_task.check_hash and (
-                        download_task.file_hash is not None or download_task.file_hash != sha256):
+                if download_task.check_hash and str(download_task.file_hash) != str(sha256):
                     self.__download_threads -= 1
                     return self.__send_websocket_action('file_download:failure', {
                         'task': download_task.task_id,
+                        'file': download_task.file_id,
                         'error_type': "文件哈希校验失败",
                         'error_content': f"{download_task.file_hash} != {sha256}"
                     })
@@ -143,6 +147,7 @@ class DownloadFileUtil:
             self.__download_threads -= 1
             return self.__send_websocket_action('file_download:failure', {
                 'task': download_task.task_id,
+                'file': download_task.file_id,
                 'error_type': "请求错误/未知错误",
                 'error_content': str(e)
             })
@@ -150,7 +155,7 @@ class DownloadFileUtil:
         logger.success(f"文件 {filename} 下载成功")
         return self.__send_websocket_action('file_download:success', {
             'task': download_task.task_id,
-            'file_hash': sha256
+            'file': download_task.file_id,
         })
 
     @logger.catch
@@ -191,11 +196,12 @@ class DownloadFileUtil:
         :return:
         """
         while True:
-            task = self.__download_queue.get()
-            if not task:
+            if self.__download_queue.empty():
                 break
             elif self.__download_threads >= self.__max_download_thread:
                 time.sleep(0.3)
+                continue
+            task = self.__download_queue.get()
             try:
                 asyncio.run_coroutine_threadsafe(
                     self.__download(task),
@@ -206,6 +212,7 @@ class DownloadFileUtil:
                 logger.error(f"Run Download Task Error: {err}")
                 self.__send_websocket_action('file_download:failure', {
                     'task': task.task_id,
+                    'file': task.file_id,
                     'error_type': "请求错误/未知错误（启动任务时）",
                     'error_content': str(err)
                 })
