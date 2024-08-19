@@ -3,21 +3,32 @@ LABEL authors="fsj"
 
 USER root
 
+ARG RUST_INSTALL_PACKAGE=rust-1.80.0-loongarch64-linux.tar.xz
+
 WORKDIR /
 
 RUN apt update
 
 RUN apt install -y gcc libpq-dev libffi-dev libmagic1 g++ wget libssl-dev pkg-config
 
-RUN wget http://ftp.loongnix.cn/toolchain/rust/rust-1.78/2024-05-06/abi1.0/rust-1.78.0-loongarch64-unknown-linux-gnu.tar.gz
+RUN wget https://lib.storage.pigeon-server.cn/$RUST_INSTALL_PACKAGE
 
-RUN tar zxf rust-1.78.0-loongarch64-unknown-linux-gnu.tar.gz
+RUN mkdir rust-install
 
-RUN ./rust-1.78.0-loongarch64-unknown-linux-gnu/install.sh
+RUN tar xvf $RUST_INSTALL_PACKAGE rust-install
 
-RUN rm rust-1.78.0-loongarch64-unknown-linux-gnu.tar.gz
+RUN ./rust-install/install.sh
 
-RUN rm -rf ./rust-1.78.0-loongarch64-unknown-linux-gnu/
+RUN rm $RUST_INSTALL_PACKAGE
+
+RUN rm -rf ./rust-install
+
+RUN mkdir -p /root/.cargo && \
+    echo "[source.crates-io]" > /root/.cargo/config.toml && \
+    echo "replace-with = 'mirror'" >> /root/.cargo/config.toml && \
+    echo "" >> /root/.cargo/config.toml && \
+    echo "[source.mirror]" >> /root/.cargo/config.toml && \
+    echo "registry = \"sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/\"" >> /root/.cargo/config.toml
 
 COPY . /build
 
@@ -25,10 +36,9 @@ WORKDIR /build
 
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
-RUN pip install -r requirements.txt
+RUN pip install pyinstaller cryptography==42.0.8
 
-# 安装PyInstaller
-RUN pip install pyinstaller
+RUN pip install -r requirements.txt
 
 # 使用PyInstaller将Python脚本打包成可执行文件
 RUN pyinstaller --onefile main.py -n loongarch64-ServerManager-Node.bin
