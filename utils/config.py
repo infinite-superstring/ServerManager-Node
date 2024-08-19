@@ -49,10 +49,10 @@ re_connect = true
 [safe]
 # 允许服务器执行命令
 execute_command = true
-# 允许服务器访问文件
-access_file = true
 # 允许服务器连接终端
-connect_terminal = true"""
+connect_terminal = true
+# 允许下载服务器上的文件
+download_file = true"""
         with open("config.toml", "w",encoding='utf-8') as f:
             f.write(file_data)
         logger.info("配置文件已初始化，请填写完成后重启本程序")

@@ -3,12 +3,10 @@ import os.path
 
 import aiohttp
 
-from utils.config import config
 from utils.websocket import WebSocket
 from utils.model import database, Task
 from utils.logger import logger
 
-# config = config().get_config
 ws: WebSocket
 
 async def main():

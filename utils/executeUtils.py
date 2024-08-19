@@ -217,7 +217,7 @@ class executeUtils:
                 target=self.__handle_websocket_queue,
                 args=()
             )
-            self.__get_process_thread.start()
+            self.__handle_websocket_thread.start()
 
     def __handle_websocket_queue(self):
         while True:

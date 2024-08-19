@@ -138,8 +138,9 @@ class WebSocket:
         await update_node_info(self)
         self.__node_config = payload
         await self._start_node_usage_upload_task()
-        # 加载任务列表
-        self.__shell_task_service.init_task_list(self.__node_config.get('task'))
+        if self.__config().get("safe").get("execute_command"):
+            # 加载任务列表
+            self.__shell_task_service.init_task_list(self.__node_config.get('task'))
         logger.info("node ready!")
 
     @logger.catch
@@ -233,21 +234,29 @@ class WebSocket:
     @logger.catch
     async def _add_task(self, data: dict):
         """添加任务"""
+        if self.__config().get("safe").get("execute_command") is False:
+            return
         self.__shell_task_service.add_task(data)
 
     @logger.catch
     async def _remove_task(self, data):
         """删除一个任务"""
+        if self.__config().get("safe").get("execute_command") is False:
+            return
         self.__shell_task_service.remove_task(data)
 
     @logger.catch
     async def _reload_task(self, data):
         """重载一个任务"""
+        if self.__config().get("safe").get("execute_command") is False:
+            return
         self.__shell_task_service.reload_task(data)
 
     @logger.catch
     async def _execute_shell(self, data):
         """执行一个shell"""
+        if self.__config().get("safe").get("execute_command") is False:
+            return
         self.__shell_execute_service.executeShellCommand(
             data.get('task_uuid'),
             data.get('base_path'),
@@ -257,6 +266,8 @@ class WebSocket:
     @logger.catch
     async def _download_files(self, data):
         """下载文件"""
+        if self.__config().get("safe").get("download_file") is False:
+            return
         task_id = data.get('task')
         save_path = data.get('save_path')
         for file in data.get('files'):
