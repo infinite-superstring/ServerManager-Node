@@ -30,6 +30,7 @@ async def authenticate(session, auth_path, auth_data):
                         return session, False
                     if not __verify_password(hash, client_config().get('server').get('server_token'), salt):
                         logger.error("认证失败，服务端返回的认证信息不正确")
+                        return session, False
                     logger.success(f'认证成功，欢迎连接：{data.get("server_name")}')
                     return session, True
                 else:
