@@ -43,7 +43,7 @@ class WebSocket:
         host = self.__config().get('server').get('server_host')
         port = self.__config().get('server').get('server_port')
         ws_url = ("wws://" if SSL else "ws://" + host + ":" + str(port) + "/ws/node/node_client")
-        download_file_url = ("https://" if SSL else "http://" + host + ":" + str(port) + "/node/file_distribution/download")
+        download_file_url = ("https://" if SSL else "http://" + host + ":" + str(port) + "/api/node/file_distribution/download")
         auth_path = f'{"https" if SSL else "http"}://{host}:{port}/api/auth/nodeAuth'
         auth_data = {
             "node_name": self.__config()['server']['client_name'],
@@ -270,13 +270,13 @@ class WebSocket:
             return
         task_id = data.get('task')
         save_path = data.get('save_path')
+        save_path = save_path if save_path else os.path.join(os.getcwd(), 'data/download')
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
         for file in data.get('files'):
             if not task_id or not file:
                 logger.warning("参数不完整")
                 return
-            save_path = save_path if save_path else os.path.join(os.getcwd(), 'data/download')
-            if not os.path.exists(save_path):
-                os.makedirs(save_path)
             await self.__download_file_service.download_file(task_id, file, save_path, True, file)
 
     @logger.catch

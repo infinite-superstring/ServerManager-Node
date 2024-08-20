@@ -19,7 +19,7 @@ class DownloadTaskConfig:
     下载任务配置
     """
     task_id: str
-    file_id: dict
+    file_id: str
     save_path: str
     check_hash: bool
     file_hash: str
@@ -99,7 +99,7 @@ class DownloadFileUtil:
     async def __download(self, download_task: DownloadTaskConfig):
         """
         下载任务实例
-        :param download_task:
+        :param download_task: 下载任务实例
         :return:
         """
         if not os.path.exists(download_task.save_path):
