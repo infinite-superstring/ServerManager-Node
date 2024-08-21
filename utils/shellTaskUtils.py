@@ -2,6 +2,7 @@ import locale
 import os.path
 import asyncio
 import tempfile
+from queue import Queue
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from tzlocal import get_localzone
@@ -19,6 +20,8 @@ from utils.model import Task
 
 class shellTaskUtils:
     __websocket: websocket
+    __websocket_message_queue: Queue
+    __handle_websocket_thread: Thread | None = None
     __scheduler: BackgroundScheduler
     __process_list: dict[str: subprocess.Popen] = {}
     __process_mark: dict[str:str] = {}
@@ -34,6 +37,7 @@ class shellTaskUtils:
         """
         self.__websocket = ws
         local_tz = get_localzone()
+        self.__websocket_message_queue = Queue()
         self.__scheduler = BackgroundScheduler(timezone=local_tz)
         logger.debug(f"调度器运行时区：{self.__scheduler.timezone}")
 
@@ -457,13 +461,24 @@ class shellTaskUtils:
         if payload is None:
             payload = {}
 
-        try:
-            asyncio.run(self.__websocket.websocket_send_json({
-                'action': action,
-                'data': payload
-            }))
-        except Exception as err:
-            logger.error(f"任务信息返回失败！{err}")
+        self.__websocket_message_queue.put({'action': action, 'data': payload})
+        if self.__handle_websocket_thread is None:
+            self.__handle_websocket_thread = Thread(
+                target=self.__handle_websocket_queue,
+                args=()
+            )
+            self.__handle_websocket_thread.start()
+
+    def __handle_websocket_queue(self):
+        while True:
+            task = self.__websocket_message_queue.get()
+            if not task:
+                break
+            try:
+                asyncio.run(self.__websocket.websocket_send_json(task))
+            except Exception as err:
+                logger.error(f"Send WebSocket Message Error: {err}")
+        self.__handle_websocket_thread = None
 
     @logger.catch
     def __get_task(self, uuid):
